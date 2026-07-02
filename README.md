@@ -78,13 +78,6 @@ npm run db:setup   # runs src/db/schema.sql against DATABASE_URL
 
 This also seeds a handful of demo products so the UI isn't empty.
 
-### 4. Create an admin user
-
-Register a normal account through the UI first, then promote it manually:
-
-```bash
-psql $DATABASE_URL -c "UPDATE users SET role = 'admin' WHERE email = 'rulete.jeric@gmail.com';"
-```
 
 ### 5. Run both apps
 
