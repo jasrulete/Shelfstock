@@ -1,9 +1,46 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/hooks/useCart';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
+
+// The input holds a local draft so the field can be momentarily empty while
+// the user retypes a number. Committing Number('') = 0 straight to the cart
+// would delete the item on the first backspace; only valid quantities >= 1
+// are committed, and blur snaps the draft back to the real value.
+function QuantityInput({
+  value,
+  max,
+  onCommit,
+}: {
+  value: number;
+  max: number;
+  onCommit: (quantity: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      min={1}
+      max={max}
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const parsed = parseInt(e.target.value, 10);
+        if (!Number.isNaN(parsed) && parsed >= 1) onCommit(parsed);
+      }}
+      onBlur={() => setDraft(String(value))}
+      className="w-16 rounded border border-gray-300 px-2 py-1 text-sm"
+    />
+  );
+}
 
 export default function CartDrawer() {
   const { items, updateQuantity, removeItem, subtotal } = useCart();
@@ -50,13 +87,10 @@ export default function CartDrawer() {
             </div>
           </Link>
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              max={product.stock}
+            <QuantityInput
               value={quantity}
-              onChange={(e) => updateQuantity(product.id, Number(e.target.value))}
-              className="w-16 rounded border border-gray-300 px-2 py-1 text-sm"
+              max={product.stock}
+              onCommit={(q) => updateQuantity(product.id, q)}
             />
             <button
               onClick={() => removeItem(product.id)}

@@ -1,14 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
-import { useCart } from '@/hooks/useCart';
+import AddToCartModal from './AddToCartModal';
 
 export default function ProductCard({ product }: { product: Product }) {
   const { currency, convert } = useCurrency();
-  const { addItem } = useCart();
+  const [showModal, setShowModal] = useState(false);
   const priceUsd = Number(product.price);
 
   return (
@@ -31,13 +32,14 @@ export default function ProductCard({ product }: { product: Product }) {
       <div className="mt-auto flex items-center justify-between">
         <span className="font-semibold">{formatMoney(convert(priceUsd), currency)}</span>
         <button
-          onClick={() => addItem(product, 1)}
+          onClick={() => setShowModal(true)}
           disabled={product.stock === 0}
           className="rounded bg-brand-500 px-3 py-1.5 text-sm text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
           {product.stock === 0 ? 'Out of stock' : 'Add to cart'}
         </button>
       </div>
+      {showModal && <AddToCartModal product={product} onClose={() => setShowModal(false)} />}
     </div>
   );
 }

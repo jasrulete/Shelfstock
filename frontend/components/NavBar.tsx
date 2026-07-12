@@ -34,6 +34,7 @@ export default function NavBar() {
         </Link>
 
         <nav className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm">
+          <Link href="/">Products</Link>
           <CurrencySelector />
           <Link href="/cart" className="relative">
             Cart
