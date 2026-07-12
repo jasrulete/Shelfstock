@@ -24,11 +24,18 @@ interface TopProduct {
   revenue: number;
 }
 
+interface CustomerStats {
+  total_customers: number;
+  new_customers: number;
+  repeat_rate: number;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [customers, setCustomers] = useState<CustomerStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,11 +56,13 @@ export default function AdminDashboardPage() {
       api.get<Summary>('/api/analytics/summary', { auth: true }),
       api.get<RevenuePoint[]>('/api/analytics/revenue-over-time', { auth: true }),
       api.get<TopProduct[]>('/api/analytics/top-products?limit=5', { auth: true }),
+      api.get<CustomerStats>('/api/analytics/customers', { auth: true }),
     ])
-      .then(([s, r, t]) => {
+      .then(([s, r, t, c]) => {
         setSummary(s);
         setRevenue(r);
         setTopProducts(t);
+        setCustomers(c);
       })
       .catch((err: ApiError) => setError(err.message));
   }, [router]);
@@ -65,7 +74,7 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Sales Dashboard</h1>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         <div className="rounded border border-gray-200 bg-white p-4">
           <p className="text-sm text-gray-500">Total Revenue</p>
           <p className="text-2xl font-bold">${summary.total_revenue.toFixed(2)}</p>
@@ -74,6 +83,22 @@ export default function AdminDashboardPage() {
           <p className="text-sm text-gray-500">Total Orders</p>
           <p className="text-2xl font-bold">{summary.total_orders}</p>
         </div>
+        {customers && (
+          <>
+            <div className="rounded border border-gray-200 bg-white p-4">
+              <p className="text-sm text-gray-500">Customers</p>
+              <p className="text-2xl font-bold">{customers.total_customers}</p>
+            </div>
+            <div className="rounded border border-gray-200 bg-white p-4">
+              <p className="text-sm text-gray-500">New (30d)</p>
+              <p className="text-2xl font-bold">{customers.new_customers}</p>
+            </div>
+            <div className="rounded border border-gray-200 bg-white p-4">
+              <p className="text-sm text-gray-500">Repeat Rate</p>
+              <p className="text-2xl font-bold">{(customers.repeat_rate * 100).toFixed(0)}%</p>
+            </div>
+          </>
+        )}
       </div>
 
       <div>
