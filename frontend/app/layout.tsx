@@ -3,6 +3,7 @@ import './globals.css';
 import { CurrencyProvider } from '@/lib/currencyContext';
 import { CartProvider } from '@/hooks/useCart';
 import NavBar from '@/components/NavBar';
+import Footer from '@/components/Footer';
 
 export const metadata: Metadata = {
   title: {
@@ -18,8 +19,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <CurrencyProvider>
           <CartProvider>
-            <NavBar />
-            <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+            <div className="flex min-h-screen flex-col">
+              <NavBar />
+              <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+              <Footer />
+            </div>
           </CartProvider>
         </CurrencyProvider>
       </body>
