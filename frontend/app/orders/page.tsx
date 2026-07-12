@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Order } from '@/types';
 import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
+import OrderStatusBadge from '@/components/OrderStatusBadge';
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -28,7 +30,8 @@ export default function OrdersPage() {
 
   if (loading) return <p className="text-gray-500">Loading orders...</p>;
   if (error) return <p className="text-red-500">{error}</p>;
-  if (orders.length === 0) return <p className="text-gray-500">You haven&apos;t placed any orders yet.</p>;
+  if (orders.length === 0)
+    return <p className="text-gray-500">You haven&apos;t placed any orders yet.</p>;
 
   return (
     <div className="space-y-4">
@@ -36,7 +39,12 @@ export default function OrdersPage() {
       {orders.map((order) => (
         <div key={order.id} className="rounded border border-gray-200 bg-white p-4">
           <div className="flex items-center justify-between">
-            <span className="font-medium">Order #{order.id}</span>
+            <div className="flex items-center gap-2">
+              <Link href={`/orders/${order.id}`} className="font-medium text-brand-600 underline">
+                Order #{order.id}
+              </Link>
+              <OrderStatusBadge status={order.status} />
+            </div>
             <span className="text-sm text-gray-500">
               {new Date(order.created_at).toLocaleDateString()}
             </span>
@@ -44,7 +52,7 @@ export default function OrdersPage() {
           <ul className="mt-2 space-y-1 text-sm text-gray-600">
             {order.items.map((item) => (
               <li key={item.id}>
-                {item.product_name} × {item.quantity} @ {item.price_at_purchase}{' '}
+                {item.product_name} × {item.quantity} @ ${item.price_at_purchase}{' '}
                 <span className="text-gray-400">(price at time of purchase)</span>
               </li>
             ))}
@@ -52,7 +60,7 @@ export default function OrdersPage() {
           <div className="mt-2 flex justify-between font-semibold">
             <span>Total</span>
             <span>
-              {order.currency} {order.total_amount}
+              ${order.total_amount} {order.currency}
             </span>
           </div>
         </div>

@@ -1,11 +1,15 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { CurrencyProvider } from '@/lib/currencyContext';
+import { CartProvider } from '@/hooks/useCart';
 import NavBar from '@/components/NavBar';
 
 export const metadata: Metadata = {
-  title: 'ShelfStock',
-  description: 'A small e-commerce storefront built as a portfolio project.',
+  title: {
+    default: 'ShelfStock',
+    template: '%s | ShelfStock',
+  },
+  description: 'ShelfStock - an online store for electronics, books, apparel, and more.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -13,8 +17,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <CurrencyProvider>
-          <NavBar />
-          <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+          <CartProvider>
+            <NavBar />
+            <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+          </CartProvider>
         </CurrencyProvider>
       </body>
     </html>

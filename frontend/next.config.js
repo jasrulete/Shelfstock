@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns: [{ protocol: 'https', hostname: 'placehold.co' }],
+    // Admins can paste any https image URL when creating a product, so we
+    // can't enumerate hostnames ahead of time.
+    remotePatterns: [{ protocol: 'https', hostname: '**' }],
   },
 };
 

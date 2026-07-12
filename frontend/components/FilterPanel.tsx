@@ -1,8 +1,12 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { ProductFilters } from '@/hooks/useProducts';
+import { api } from '@/lib/api';
 
-const CATEGORIES = ['Electronics', 'Home & Kitchen', 'Books', 'Apparel', 'Toys'];
+// Fallback shown until /api/categories responds (or if it fails), so the
+// dropdown is never empty.
+const DEFAULT_CATEGORIES = ['Electronics', 'Home & Kitchen', 'Books', 'Apparel', 'Toys'];
 
 export default function FilterPanel({
   filters,
@@ -11,6 +15,19 @@ export default function FilterPanel({
   filters: ProductFilters;
   onChange: (patch: Partial<ProductFilters>) => void;
 }) {
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+
+  useEffect(() => {
+    api
+      .get<string[]>('/api/categories')
+      .then((list) => {
+        if (list.length > 0) setCategories(list);
+      })
+      .catch(() => {
+        // keep the fallback list
+      });
+  }, []);
+
   return (
     <div className="flex flex-wrap items-center gap-3 rounded border border-gray-200 bg-white p-3">
       <select
@@ -19,7 +36,7 @@ export default function FilterPanel({
         className="rounded border border-gray-300 px-2 py-1.5 text-sm"
       >
         <option value="">All categories</option>
-        {CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <option key={c} value={c}>
             {c}
           </option>

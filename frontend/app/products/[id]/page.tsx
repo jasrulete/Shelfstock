@@ -50,7 +50,14 @@ export default function ProductDetailPage() {
             min={1}
             max={product.stock}
             value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
+            onChange={(e) => {
+              const parsed = parseInt(e.target.value, 10);
+              // Clamp to [1, stock] and ignore non-numeric input so we
+              // never add NaN or an unfulfillable quantity to the cart.
+              setQuantity(
+                Number.isNaN(parsed) ? 1 : Math.min(Math.max(1, parsed), Math.max(1, product.stock))
+              );
+            }}
             className="w-20 rounded border border-gray-300 px-2 py-2"
           />
           <button

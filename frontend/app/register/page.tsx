@@ -1,14 +1,24 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import { User } from '@/types';
 
+// Suspense boundary required for useSearchParams - same pattern as /login.
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<p className="text-gray-500">Loading...</p>}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +34,9 @@ export default function RegisterPage() {
         password,
       });
       auth.saveSession(res.token, res.user);
-      router.push('/');
+      // Only follow internal paths - see the same guard on /login.
+      const next = searchParams.get('next');
+      router.push(next && next.startsWith('/') && !next.startsWith('//') ? next : '/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Registration failed');
     } finally {

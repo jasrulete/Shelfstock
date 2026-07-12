@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { auth } from '@/lib/auth';
+import { auth, AUTH_CHANGED_EVENT } from '@/lib/auth';
 import { User } from '@/types';
 import CurrencySelector from './CurrencySelector';
 import { useCart } from '@/hooks/useCart';
@@ -13,6 +13,11 @@ export default function NavBar() {
 
   useEffect(() => {
     setUser(auth.getUser());
+    // Re-read the session whenever login/logout happens, so the nav
+    // updates immediately instead of waiting for a full page reload.
+    const sync = () => setUser(auth.getUser());
+    window.addEventListener(AUTH_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, sync);
   }, []);
 
   function handleLogout() {
@@ -42,7 +47,13 @@ export default function NavBar() {
           {user ? (
             <>
               <Link href="/orders">Orders</Link>
-              {user.role === 'admin' && <Link href="/admin/dashboard">Dashboard</Link>}
+              {user.role === 'admin' && (
+                <>
+                  <Link href="/admin/dashboard">Dashboard</Link>
+                  <Link href="/admin/products">Products</Link>
+                  <Link href="/admin/orders">Manage Orders</Link>
+                </>
+              )}
               <button onClick={handleLogout} className="text-gray-500 hover:text-gray-800">
                 Logout
               </button>

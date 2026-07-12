@@ -1,11 +1,31 @@
 # ShelfStock
 
-A small, full-stack e-commerce storefront built as a portfolio project: product
-browsing/search/filtering, a cart, checkout that creates real orders, JWT auth,
-and an admin analytics dashboard.
+A full-stack e-commerce storefront: product browsing/search/filtering, a cart,
+Cash-on-Delivery checkout with shipping details, a full order lifecycle
+(pending → shipped → completed / cancelled with stock restoration), JWT auth,
+and an admin area with analytics, product management, and order fulfillment.
 
 **Stack:** Next.js 14 (App Router) + TypeScript + Tailwind on the frontend,
 Express + TypeScript + PostgreSQL on the backend. No paid services required.
+
+## Features
+
+- **Storefront** — search (debounced), category/price filters, sorting,
+  server-side pagination, product detail pages, multi-currency price display
+  (USD/PHP/EUR via live exchange rates with a cached fallback).
+- **Cart** — localStorage-backed, synced across tabs and components,
+  quantities capped at available stock.
+- **Checkout** — shipping name/phone/address/city + Cash on Delivery. Orders
+  are validated and created in a single DB transaction with row locking, and
+  always stored in USD (other currencies are display-only conversions).
+- **Order lifecycle** — orders start `pending`; admins move them to
+  `shipped`/`completed`/`cancelled`. Cancelling restores the reserved stock
+  and is terminal.
+- **Admin** — sales dashboard (revenue over time, top products), product
+  CRUD (`/admin/products`), and order fulfillment (`/admin/orders`).
+- **Security** — bcrypt password hashing, JWT auth with row-level ownership
+  checks, helmet security headers, rate limiting (tight on auth endpoints),
+  request body size limits, input validation on every write endpoint.
 
 ## Project layout
 
@@ -76,8 +96,24 @@ cd shelfstock/backend
 npm run db:setup   # runs src/db/schema.sql against DATABASE_URL
 ```
 
-This also seeds a handful of demo products so the UI isn't empty.
+This also seeds a handful of demo products so the UI isn't empty. The schema
+is idempotent — re-running it on an existing database is safe and applies any
+new columns/constraints (it's also how you migrate a deployed DB).
 
+> **Windows note:** `npm run db:setup` uses `psql $DATABASE_URL`, which needs
+> a POSIX shell (Git Bash). Alternatively run
+> `psql -d <your-database-url> -f src/db/schema.sql` directly.
+
+### 4. Create an admin user
+
+Register an account through the app first, then promote it:
+
+```bash
+cd shelfstock/backend
+npm run create-admin -- you@example.com
+```
+
+Admins see the Dashboard, Products, and Manage Orders links in the nav.
 
 ### 5. Run both apps
 
@@ -106,9 +142,10 @@ Visit `http://localhost:3000`.
    `CORS_ORIGIN` (your Vercel frontend URL once you have it), `PORT` (usually
    auto-set by the platform).
 5. Build command: `npm run build`. Start command: `npm start`.
-6. Run the schema once against the hosted DB:
+6. Run the schema against the hosted DB:
    `psql $DATABASE_URL -f src/db/schema.sql` (or run `npm run db:setup` with
-   `DATABASE_URL` pointed at the hosted instance).
+   `DATABASE_URL` pointed at the hosted instance). Re-run it after pulling
+   updates — it's idempotent and applies any new columns/constraints.
 
 ### Frontend → Vercel
 
@@ -125,10 +162,13 @@ Visit `http://localhost:3000`.
 | POST            | `/api/auth/login`                  | –                |
 | GET             | `/api/products`                    | –                |
 | GET             | `/api/products/:id`                | –                |
+| GET             | `/api/categories`                  | –                |
 | POST/PUT/DELETE | `/api/products/:id`                | admin            |
 | POST            | `/api/orders`                      | user             |
 | GET             | `/api/orders/my`                   | user             |
 | GET             | `/api/orders/:id`                  | user (own order) |
+| GET             | `/api/orders`                      | admin            |
+| PATCH           | `/api/orders/:id/status`           | admin            |
 | GET             | `/api/analytics/summary`           | admin            |
 | GET             | `/api/analytics/revenue-over-time` | admin            |
 | GET             | `/api/analytics/top-products`      | admin            |

@@ -1,3 +1,5 @@
+import { auth as authStore } from '@/lib/auth';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 class ApiError extends Error {
@@ -41,6 +43,12 @@ async function request<T>(
     } catch {
       // response wasn't JSON - keep statusText
     }
+    // An authenticated request rejected with 401 means the stored token is
+    // expired or invalid - clear it so the UI stops pretending we're
+    // logged in and the next protected page redirects to /login.
+    if (res.status === 401 && auth && typeof window !== 'undefined') {
+      authStore.clearSession();
+    }
     throw new ApiError(message, res.status);
   }
 
@@ -57,6 +65,8 @@ export const api = {
     request<T>(path, { ...options, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown, options?: RequestInit & { auth?: boolean }) =>
     request<T>(path, { ...options, method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
+  patch: <T>(path: string, body?: unknown, options?: RequestInit & { auth?: boolean }) =>
+    request<T>(path, { ...options, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string, options?: RequestInit & { auth?: boolean }) =>
     request<T>(path, { ...options, method: 'DELETE' }),
 };

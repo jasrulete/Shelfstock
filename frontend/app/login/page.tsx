@@ -40,7 +40,10 @@ function LoginForm() {
         },
       );
       auth.saveSession(res.token, res.user);
-      router.push(searchParams.get("next") ?? "/");
+      // Only follow internal paths - a next param like "https://evil.com"
+      // must never redirect the user off-site after login.
+      const next = searchParams.get("next");
+      router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {
