@@ -31,7 +31,17 @@ export default function OrdersPage() {
   if (loading) return <p className="text-gray-500">Loading orders...</p>;
   if (error) return <p className="text-red-500">{error}</p>;
   if (orders.length === 0)
-    return <p className="text-gray-500">You haven&apos;t placed any orders yet.</p>;
+    return (
+      <div className="rounded border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <p className="mb-4">You haven&apos;t placed any orders yet.</p>
+        <Link
+          href="/"
+          className="inline-block rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600"
+        >
+          Start shopping
+        </Link>
+      </div>
+    );
 
   return (
     <div className="space-y-4">

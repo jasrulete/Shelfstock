@@ -25,7 +25,19 @@ export default function HomePage() {
       {error && <p className="text-red-500">{error}</p>}
 
       {loading && !data ? (
-        <p className="text-gray-500">Loading products...</p>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="animate-pulse rounded-lg border border-gray-200 bg-white p-3">
+              <div className="mb-3 aspect-square w-full rounded bg-gray-200" />
+              <div className="mb-2 h-4 w-3/4 rounded bg-gray-200" />
+              <div className="mb-4 h-3 w-full rounded bg-gray-100" />
+              <div className="flex items-center justify-between">
+                <div className="h-4 w-14 rounded bg-gray-200" />
+                <div className="h-8 w-24 rounded bg-gray-100" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : data && data.products.length === 0 ? (
         <p className="text-gray-500">No products match your filters.</p>
       ) : (

@@ -40,8 +40,14 @@ export default function ProductDetailPage() {
           {formatMoney(convert(Number(product.price)), currency)}
         </p>
         <p className="mt-4 text-gray-700">{product.description}</p>
-        <p className="mt-2 text-sm text-gray-500">
-          {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+        <p className="mt-2 text-sm">
+          {product.stock === 0 ? (
+            <span className="text-red-600">Out of stock</span>
+          ) : product.stock <= 5 ? (
+            <span className="font-medium text-amber-600">Only {product.stock} left!</span>
+          ) : (
+            <span className="text-green-700">In stock</span>
+          )}
         </p>
 
         <div className="mt-6 flex items-center gap-3">

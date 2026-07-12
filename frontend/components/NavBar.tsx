@@ -33,7 +33,7 @@ export default function NavBar() {
           ShelfStock
         </Link>
 
-        <nav className="flex items-center gap-4 text-sm">
+        <nav className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-sm">
           <CurrencySelector />
           <Link href="/cart" className="relative">
             Cart

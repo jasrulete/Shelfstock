@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/hooks/useCart';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -11,8 +12,11 @@ export default function CartDrawer() {
   if (items.length === 0) {
     return (
       <div className="rounded border border-gray-200 bg-white p-8 text-center text-gray-500">
-        Your cart is empty.{' '}
-        <Link href="/" className="text-brand-600 underline">
+        <p className="mb-4">Your cart is empty.</p>
+        <Link
+          href="/"
+          className="inline-block rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600"
+        >
           Browse products
         </Link>
       </div>
@@ -26,12 +30,25 @@ export default function CartDrawer() {
           key={product.id}
           className="flex items-center justify-between gap-4 rounded border border-gray-200 bg-white p-3"
         >
-          <div>
-            <p className="font-medium">{product.name}</p>
-            <p className="text-sm text-gray-500">
-              {formatMoney(convert(Number(product.price)), currency)} each
-            </p>
-          </div>
+          <Link href={`/products/${product.id}`} className="flex items-center gap-3">
+            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-gray-100">
+              {product.image_url && (
+                <Image
+                  src={product.image_url}
+                  alt={product.name}
+                  fill
+                  className="object-cover"
+                  sizes="64px"
+                />
+              )}
+            </div>
+            <div>
+              <p className="font-medium hover:underline">{product.name}</p>
+              <p className="text-sm text-gray-500">
+                {formatMoney(convert(Number(product.price)), currency)} each
+              </p>
+            </div>
+          </Link>
           <div className="flex items-center gap-2">
             <input
               type="number"

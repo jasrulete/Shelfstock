@@ -6,8 +6,10 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react';
+import Link from 'next/link';
 import { CartItem, Product } from '@/types';
 
 const CART_KEY = 'shelfstock_cart';
@@ -54,6 +56,16 @@ const CartContext = createContext<CartContextValue | null>(null);
 // same cart and re-renders together when it changes.
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  // Feedback toast shown briefly after "Add to cart" - without it, the
+  // only signal is the tiny badge count changing in the nav.
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2500);
+  }, []);
 
   useEffect(() => {
     setItems(loadCart());
@@ -66,20 +78,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const addItem = useCallback((product: Product, quantity = 1) => {
-    setItems((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id);
-      const next = existing
-        ? prev.map((i) =>
-            i.product.id === product.id
-              ? { ...i, product, quantity: clampToStock(i.quantity + quantity, product) }
-              : i
-          )
-        : [...prev, { product, quantity: clampToStock(quantity, product) }];
-      saveCart(next);
-      return next;
-    });
-  }, []);
+  const addItem = useCallback(
+    (product: Product, quantity = 1) => {
+      setItems((prev) => {
+        const existing = prev.find((i) => i.product.id === product.id);
+        const next = existing
+          ? prev.map((i) =>
+              i.product.id === product.id
+                ? { ...i, product, quantity: clampToStock(i.quantity + quantity, product) }
+                : i
+            )
+          : [...prev, { product, quantity: clampToStock(quantity, product) }];
+        saveCart(next);
+        return next;
+      });
+      showToast(`${product.name} added to cart`);
+    },
+    [showToast]
+  );
 
   const updateQuantity = useCallback((productId: number, quantity: number) => {
     setItems((prev) => {
@@ -117,6 +133,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{ items, addItem, updateQuantity, removeItem, clearCart, subtotal, itemCount }}
     >
       {children}
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-gray-900 px-4 py-2.5 text-sm text-white shadow-lg"
+        >
+          <span>✓ {toast}</span>
+          <Link href="/cart" className="font-semibold text-brand-100 underline">
+            View cart
+          </Link>
+        </div>
+      )}
     </CartContext.Provider>
   );
 }
