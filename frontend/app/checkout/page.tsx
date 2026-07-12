@@ -7,6 +7,7 @@ import { useCurrency, formatMoney } from '@/lib/currencyContext';
 import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { Order } from '@/types';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart();
@@ -80,12 +81,16 @@ export default function CheckoutPage() {
               onChange={(e) => patchShipping({ phone: e.target.value })}
               className={inputClass}
             />
-            <input
+            <AddressAutocomplete
               required
               maxLength={300}
               placeholder="Street address"
               value={shipping.address}
-              onChange={(e) => patchShipping({ address: e.target.value })}
+              onChange={(address) => patchShipping({ address })}
+              onSelect={({ address, city }) =>
+                // Keep an already-typed city if the suggestion has none.
+                patchShipping({ address, ...(city ? { city } : {}) })
+              }
               className={inputClass}
             />
             <input
