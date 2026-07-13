@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
@@ -30,12 +31,27 @@ interface CustomerStats {
   repeat_rate: number;
 }
 
+interface LowStockProduct {
+  id: number;
+  name: string;
+  stock: number;
+}
+
+interface StaleOrder {
+  id: number;
+  total_amount: string;
+  created_at: string;
+  user_email: string;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [customers, setCustomers] = useState<CustomerStats | null>(null);
+  const [lowStock, setLowStock] = useState<LowStockProduct[]>([]);
+  const [staleOrders, setStaleOrders] = useState<StaleOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,12 +73,16 @@ export default function AdminDashboardPage() {
       api.get<RevenuePoint[]>('/api/analytics/revenue-over-time', { auth: true }),
       api.get<TopProduct[]>('/api/analytics/top-products?limit=5', { auth: true }),
       api.get<CustomerStats>('/api/analytics/customers', { auth: true }),
+      api.get<LowStockProduct[]>('/api/analytics/low-stock', { auth: true }),
+      api.get<StaleOrder[]>('/api/analytics/stale-orders', { auth: true }),
     ])
-      .then(([s, r, t, c]) => {
+      .then(([s, r, t, c, ls, so]) => {
         setSummary(s);
         setRevenue(r);
         setTopProducts(t);
         setCustomers(c);
+        setLowStock(ls);
+        setStaleOrders(so);
       })
       .catch((err: ApiError) => setError(err.message));
   }, [router]);
@@ -100,6 +120,48 @@ export default function AdminDashboardPage() {
           </>
         )}
       </div>
+
+      {staleOrders.length > 0 && (
+        <div className="rounded border border-amber-300 bg-amber-50 p-4">
+          <h2 className="mb-2 font-semibold text-amber-800">
+            ⚠ {staleOrders.length} {staleOrders.length === 1 ? 'order' : 'orders'} pending for 7+
+            days
+          </h2>
+          <ul className="space-y-1 text-sm text-amber-900">
+            {staleOrders.map((o) => (
+              <li key={o.id}>
+                <Link href={`/orders/${o.id}`} className="underline">
+                  Order #{o.id}
+                </Link>{' '}
+                — {o.user_email} — ${o.total_amount} — placed{' '}
+                {new Date(o.created_at).toLocaleDateString()}
+              </li>
+            ))}
+          </ul>
+          <Link href="/admin/orders" className="mt-2 inline-block text-sm font-medium text-amber-800 underline">
+            Manage orders →
+          </Link>
+        </div>
+      )}
+
+      {lowStock.length > 0 && (
+        <div className="rounded border border-red-300 bg-red-50 p-4">
+          <h2 className="mb-2 font-semibold text-red-800">
+            Low stock ({lowStock.length} {lowStock.length === 1 ? 'product' : 'products'} at 5 or
+            fewer units)
+          </h2>
+          <ul className="space-y-1 text-sm text-red-900">
+            {lowStock.map((p) => (
+              <li key={p.id}>
+                {p.name} — {p.stock === 0 ? 'out of stock' : `${p.stock} left`}
+              </li>
+            ))}
+          </ul>
+          <Link href="/admin/products" className="mt-2 inline-block text-sm font-medium text-red-800 underline">
+            Manage products →
+          </Link>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-2 font-semibold">Revenue Over Time</h2>
