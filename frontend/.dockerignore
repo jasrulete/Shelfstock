@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+.env
+.env.*
+*.log
+*.tsbuildinfo
+.git
+.gitignore
+.vercel
+Dockerfile
+.dockerignore

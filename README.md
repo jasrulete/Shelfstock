@@ -1,5 +1,7 @@
 # ShelfStock
 
+[![CI](https://github.com/jasrulete/Shelfstock/actions/workflows/ci.yml/badge.svg)](https://github.com/jasrulete/Shelfstock/actions/workflows/ci.yml)
+
 A full-stack e-commerce storefront: product browsing/search/filtering, a cart,
 Cash-on-Delivery checkout with shipping details, a full order lifecycle
 (pending → shipped → completed / cancelled with stock restoration), JWT auth,
@@ -7,6 +9,89 @@ and an admin area with analytics, product management, and order fulfillment.
 
 **Stack:** Next.js 14 (App Router) + TypeScript + Tailwind on the frontend,
 Express + TypeScript + PostgreSQL on the backend. No paid services required.
+
+## 🐳 Run with Docker
+
+The fastest way to run the whole stack. The only prerequisite is
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker
+Engine + the Compose plugin) — no local Node or PostgreSQL needed.
+
+```bash
+docker compose up -d --build
+```
+
+Then open **http://localhost:3000**. On the first start Docker builds both
+images (a few minutes) and Postgres applies `backend/src/db/schema.sql`
+automatically, so the store comes up with demo products already seeded.
+
+### What's running
+
+| Service | Image / build          | Container port | Host port (default) | Purpose                                              |
+| ------- | ---------------------- | -------------- | ------------------- | ---------------------------------------------------- |
+| `web`   | `frontend/Dockerfile`  | 3000           | `3000`              | Next.js storefront + admin UI                        |
+| `api`   | `backend/Dockerfile`   | 4000           | `4000`              | Express REST API (`/health`, `/api/*`)               |
+| `db`    | `postgres:17-alpine`   | 5432           | `5433`              | PostgreSQL; data persists in the `db_data` volume    |
+
+Startup is ordered by healthchecks: `db` must pass `pg_isready` before `api`
+starts, and `api` must answer `/health` before `web` starts. Check status with
+`docker compose ps`, logs with `docker compose logs -f api`.
+
+`db` is published on host port **5433** (not 5432) so it never clashes with a
+locally installed Postgres. Connect to it with
+`psql postgres://postgres:postgres@localhost:5433/shelfstock`.
+
+### Environment variables
+
+Everything works out of the box with the defaults below. Override any of them
+inline (`API_PORT=4001 docker compose up -d --build`) or via a `.env` file
+next to `docker-compose.yml`.
+
+| Variable     | Default                                     | Purpose                                                                                       |
+| ------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `WEB_PORT`   | `3000`                                      | Host port for the storefront. The API's `CORS_ORIGIN` follows it automatically.               |
+| `API_PORT`   | `4000`                                      | Host port for the API. Baked into the frontend bundle as `NEXT_PUBLIC_API_URL` at build time — changing it requires `--build`. |
+| `DB_PORT`    | `5433`                                      | Host port for Postgres (container-internal traffic always uses 5432).                         |
+| `JWT_SECRET` | `dev-only-insecure-secret-change-me-please` | Signs JWTs. Fine for a local demo; set a real one (`openssl rand -hex 32`) for anything else. |
+
+Fixed (compose-internal) settings, listed for completeness: the `db` service
+uses `postgres`/`postgres`/`shelfstock` as user/password/database, and the
+`api` service receives `DATABASE_URL=postgres://postgres:postgres@db:5432/shelfstock?sslmode=disable`
+(`sslmode=disable` because the API enables SSL for any non-`localhost` DB host,
+and the bundled Postgres doesn't use SSL). `RESEND_API_KEY` (transactional
+email) is intentionally unset — the win-back email job just skips itself.
+
+### Create an admin user
+
+Register an account normally at http://localhost:3000/register, then promote
+it from inside the `api` container:
+
+```bash
+docker compose exec api node scripts/create-admin.js you@example.com
+```
+
+Log out and back in; the Dashboard / Products / Manage Orders links appear.
+
+### Reset the database
+
+The schema + demo seed only run on an **empty** volume. To wipe everything and
+start fresh:
+
+```bash
+docker compose down -v     # -v deletes the db_data volume
+docker compose up -d
+```
+
+To re-apply the (idempotent) schema after pulling updates, without losing data:
+
+```bash
+docker compose exec db psql -U postgres -d shelfstock -f /docker-entrypoint-initdb.d/schema.sql
+```
+
+### Stop
+
+```bash
+docker compose down        # stops containers; keeps the database volume
+```
 
 ## Features
 
