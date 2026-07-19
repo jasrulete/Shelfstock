@@ -54,3 +54,29 @@ jobs:
           # Dummy values so the static build succeeds; real values are set
           # at deploy time.
           NEXT_PUBLIC_API_URL: http://localhost:4000
+
+  e2e:
+    name: E2E (Dockerized stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and start db + api containers
+        run: docker compose up -d --wait --build db api
+
+      - name: Run end-to-end smoke test
+        run: node backend/scripts/e2e-smoke.mjs
+        env:
+          PROMOTE_CMD: docker compose exec -T db psql -U postgres -d shelfstock -c "UPDATE users SET role='admin' WHERE email='{EMAIL}'"
+
+      - name: API logs on failure
+        if: failure()
+        run: docker compose logs api
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

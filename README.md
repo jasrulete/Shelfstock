@@ -144,6 +144,34 @@ shelfstock/
   during order creation prevents two simultaneous checkouts from overselling
   the last unit of stock. See `backend/src/routes/orders.ts`.
 
+## Testing
+
+**Unit tests** — 45 Vitest + Supertest tests with the database mocked, covering
+auth middleware, registration/login (including the email-enumeration defense),
+pagination caps and sort-column whitelisting, and the checkout transaction:
+price snapshotting (a hostile client-supplied price is ignored), stock
+decrement/restore, and row-level authorization.
+
+```bash
+cd backend && npm test
+```
+
+**End-to-end smoke test** — the same invariants exercised against the real,
+Dockerized stack (PostgreSQL + API, no mocks): register → checkout → stock
+decrement → snapshot → cross-user 404 → admin lifecycle → cancellation stock
+restore → analytics.
+
+```bash
+docker compose up -d --wait db api
+PROMOTE_CMD="docker compose exec -T db psql -U postgres -d shelfstock -c \"UPDATE users SET role='admin' WHERE email='{EMAIL}'\"" \
+  node backend/scripts/e2e-smoke.mjs
+docker compose down -v
+```
+
+Both run in CI on every push (see the badge above): unit tests + typecheck,
+the frontend build, and the E2E job, which builds the Docker images and runs
+the smoke test against them.
+
 ## Local setup
 
 ### Prerequisites
