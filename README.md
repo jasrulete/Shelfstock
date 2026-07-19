@@ -62,7 +62,24 @@ uses `postgres`/`postgres`/`shelfstock` as user/password/database, and the
 and the bundled Postgres doesn't use SSL). `RESEND_API_KEY` (transactional
 email) is intentionally unset — the win-back email job just skips itself.
 
-### Create an admin user
+### Demo accounts
+
+Seed two ready-to-use accounts (one per side of the app):
+
+```bash
+docker compose exec api node scripts/seed-demo-users.js
+```
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin (dashboard, order fulfillment) | `admin@shelfstock.demo` | `ShelfAdmin123` |
+| Customer (browse, checkout) | `shopper@shelfstock.demo` | `ShelfShopper123` |
+
+The script is idempotent — it only resets these two accounts and never touches
+real users, products, or orders. On a hosted database, run it wherever
+`DATABASE_URL` points (e.g. `railway run node scripts/seed-demo-users.js`).
+
+### Create your own admin user
 
 Register an account normally at http://localhost:3000/register, then promote
 it from inside the `api` container:
