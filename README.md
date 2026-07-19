@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/jasrulete/Shelfstock/actions/workflows/ci.yml/badge.svg)](https://github.com/jasrulete/Shelfstock/actions/workflows/ci.yml)
 
+**🔗 Live demo: [shelfstock-frontend-three.vercel.app](https://shelfstock-frontend-three.vercel.app/)**
+
 A full-stack e-commerce storefront: product browsing/search/filtering, a cart,
 Cash-on-Delivery checkout with shipping details, a full order lifecycle
 (pending → shipped → completed / cancelled with stock restoration), JWT auth,
