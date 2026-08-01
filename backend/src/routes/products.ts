@@ -15,10 +15,16 @@ function parseId(raw: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
+// pg raises 23505 on unique violations; the constraint name tells us which
+// column so other unique constraints keep their own error handling.
+function isBarcodeConflict(err: any): boolean {
+  return err?.code === '23505' && String(err?.constraint ?? '').includes('barcode');
+}
+
 // Shared field validation for create/update. Returns an error message or
 // null. For updates, missing (undefined) fields are allowed and left as-is.
 function validateProductFields(body: any, requireAll: boolean): string | null {
-  const { name, description, price, category, stock, image_url } = body ?? {};
+  const { name, description, price, category, stock, image_url, barcode } = body ?? {};
 
   if (requireAll && (name === undefined || price === undefined || category === undefined)) {
     return 'name, price, and category are required';
@@ -40,6 +46,9 @@ function validateProductFields(body: any, requireAll: boolean): string | null {
   }
   if (image_url !== undefined && image_url !== null && typeof image_url !== 'string') {
     return 'image_url must be a string';
+  }
+  if (barcode !== undefined && barcode !== null && (typeof barcode !== 'string' || !barcode.trim() || barcode.trim().length > 64)) {
+    return 'barcode must be a non-empty string (max 64 chars)';
   }
   return null;
 }
@@ -170,17 +179,20 @@ router.post('/', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url } = req.body;
+  const { name, description, price, category, stock, image_url, barcode } = req.body;
 
   try {
     const result = await pool.query(
-      `INSERT INTO products (name, description, price, category, stock, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO products (name, description, price, category, stock, image_url, barcode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [name.trim(), description ?? null, price, category.trim(), stock ?? 0, image_url || null]
+      [name.trim(), description ?? null, price, category.trim(), stock ?? 0, image_url || null, barcode ? barcode.trim() : null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (isBarcodeConflict(err)) {
+      return res.status(409).json({ error: 'A product with this barcode already exists' });
+    }
     console.error('Create product error:', err);
     res.status(500).json({ error: 'Failed to create product' });
   }
@@ -197,7 +209,7 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url } = req.body ?? {};
+  const { name, description, price, category, stock, image_url, barcode } = req.body ?? {};
 
   try {
     const result = await pool.query(
@@ -207,16 +219,20 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
            price = COALESCE($3, price),
            category = COALESCE($4, category),
            stock = COALESCE($5, stock),
-           image_url = COALESCE($6, image_url)
-       WHERE id = $7
+           image_url = COALESCE($6, image_url),
+           barcode = COALESCE($7, barcode)
+       WHERE id = $8
        RETURNING *`,
-      [name, description, price, category, stock, image_url, id]
+      [name, description, price, category, stock, image_url, barcode === undefined ? null : (barcode ? barcode.trim() : null), id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
     res.json(result.rows[0]);
   } catch (err) {
+    if (isBarcodeConflict(err)) {
+      return res.status(409).json({ error: 'A product with this barcode already exists' });
+    }
     console.error('Update product error:', err);
     res.status(500).json({ error: 'Failed to update product' });
   }

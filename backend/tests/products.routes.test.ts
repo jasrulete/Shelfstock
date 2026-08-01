@@ -199,3 +199,56 @@ describe('GET /api/products/barcode/:code', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('product barcode on create/update', () => {
+  const admin = () => `Bearer ${tokenFor(1, 'admin')}`;
+  const base = { name: 'Mug', price: 9.5, category: 'Kitchen' };
+
+  it('passes barcode through on create', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ id: 1, ...base, barcode: '123' }] });
+
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', admin())
+      .send({ ...base, barcode: ' 123 ' });
+
+    expect(res.status).toBe(201);
+    expect(poolQuery.mock.calls[0][0]).toContain('barcode');
+    expect(poolQuery.mock.calls[0][1]).toContain('123'); // trimmed
+  });
+
+  it('409s when the barcode is already taken (create)', async () => {
+    poolQuery.mockRejectedValueOnce(
+      Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'products_barcode_key' })
+    );
+
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', admin())
+      .send({ ...base, barcode: '123' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('409s when the barcode is already taken (update)', async () => {
+    poolQuery.mockRejectedValueOnce(
+      Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'products_barcode_key' })
+    );
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ barcode: '123' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects a non-string barcode', async () => {
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', admin())
+      .send({ ...base, barcode: 42 });
+
+    expect(res.status).toBe(400);
+  });
+});
