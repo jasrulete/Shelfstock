@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
 import { OrderStatus } from '../types';
 import { sendOrderConfirmation, sendOrderShipped } from '../mail';
+import { notifyAdminsNewOrder } from '../push';
 
 const router = Router();
 
@@ -148,6 +149,9 @@ router.post('/', requireAuth, async (req, res) => {
       .query('SELECT email FROM users WHERE id = $1', [req.user!.userId])
       .then(({ rows }) => rows[0] && sendOrderConfirmation(rows[0].email, order, snapshottedItems))
       .catch((emailErr) => console.error('Order confirmation email error:', emailErr));
+
+    // Same fire-and-forget contract as the confirmation email above.
+    notifyAdminsNewOrder(order).catch((pushErr) => console.error('Order push error:', pushErr));
   } catch (err: any) {
     await client.query('ROLLBACK');
     if (err?.status) {

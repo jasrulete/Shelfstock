@@ -8,9 +8,11 @@ vi.mock('../src/mail', () => ({
   sendOrderConfirmation: vi.fn(async () => true),
   sendOrderShipped: vi.fn(async () => true),
 }));
+vi.mock('../src/push', () => ({ notifyAdminsNewOrder: vi.fn().mockResolvedValue(undefined) }));
 
 import { pool } from '../src/db';
 import { createApp } from '../src/app';
+import { notifyAdminsNewOrder } from '../src/push';
 import { tokenFor } from './helpers';
 
 const poolQuery = pool.query as unknown as ReturnType<typeof vi.fn>;
@@ -157,6 +159,8 @@ describe('POST /api/orders (checkout)', () => {
     const stockUpdate = txCall('UPDATE products SET stock = stock - $1')!;
     expect(stockUpdate[1]).toEqual([2, 7]);
     expect(txCall('COMMIT')).toBeDefined();
+
+    expect(notifyAdminsNewOrder).toHaveBeenCalledWith(expect.objectContaining({ id: expect.anything() }));
   });
 });
 
