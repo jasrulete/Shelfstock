@@ -125,6 +125,40 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/products/low-stock
+ *
+ * Public, unlike the admin dashboard's /api/analytics/low-stock. The storefront
+ * uses this to merchandise scarcity, so it deliberately excludes sold-out items
+ * - there is nothing to sell in a "0 left" row. It exposes nothing a shopper
+ * can't already read off a product card.
+ *
+ * MUST stay above the '/:id' route below: Express matches in declaration order,
+ * and '/:id' would otherwise swallow '/low-stock' and 404 on parseId().
+ */
+router.get('/low-stock', async (req, res) => {
+  const threshold = Math.min(
+    20,
+    Math.max(1, parseInt((req.query.threshold as string) ?? '5', 10) || 5)
+  );
+  const limit = Math.min(12, Math.max(1, parseInt((req.query.limit as string) ?? '4', 10) || 4));
+
+  try {
+    const result = await pool.query(
+      `SELECT id, name, price, stock, image_url
+       FROM products
+       WHERE stock > 0 AND stock <= $1
+       ORDER BY stock ASC, name ASC
+       LIMIT $2`,
+      [threshold, limit]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Low stock products error:', err);
+    res.status(500).json({ error: 'Failed to fetch low stock products' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (id === null) {

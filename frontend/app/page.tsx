@@ -6,6 +6,7 @@ import SearchBar from '@/components/SearchBar';
 import FilterPanel from '@/components/FilterPanel';
 import ProductCard from '@/components/ProductCard';
 import Pagination from '@/components/Pagination';
+import StorefrontHero from '@/components/StorefrontHero';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 
@@ -30,11 +31,15 @@ export default function HomePage() {
     filters.maxPrice !== '';
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Shop ShelfStock</h1>
+    <div className="space-y-8">
+      {/* The page's h1 now lives in the hero; browsing is a section beneath it. */}
+      <StorefrontHero />
 
-      <SearchBar value={filters.search} onChange={(search) => patchFilters({ search, page: 1 })} />
-      <FilterPanel filters={filters} onChange={patchFilters} />
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Everything in stock</h2>
+
+        <SearchBar value={filters.search} onChange={(search) => patchFilters({ search, page: 1 })} />
+        <FilterPanel filters={filters} onChange={patchFilters} />
 
       {error && (
         <p role="alert" className="font-medium text-red-700">
@@ -80,9 +85,10 @@ export default function HomePage() {
         </div>
       )}
 
-      {data && (
-        <Pagination pagination={data.pagination} onPageChange={(page) => patchFilters({ page })} />
-      )}
+        {data && (
+          <Pagination pagination={data.pagination} onPageChange={(page) => patchFilters({ page })} />
+        )}
+      </section>
     </div>
   );
 }

@@ -54,6 +54,15 @@ export function useCurrency() {
   return ctx;
 }
 
+// The locale is pinned rather than left to the browser: this runs in client
+// components that also render on the server, and a locale-dependent separator
+// would produce a hydration mismatch. PHP amounts run into the thousands, where
+// "4639.42" is genuinely hard to read at a glance.
+const NUMBER_FORMAT = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export function formatMoney(amount: number, currency: CurrencyCode): string {
-  return `${SYMBOLS[currency]}${amount.toFixed(2)}`;
+  return `${SYMBOLS[currency]}${NUMBER_FORMAT.format(amount)}`;
 }

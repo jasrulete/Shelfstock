@@ -84,8 +84,24 @@ export default function ProductCard({ product }: { product: Product }) {
           </h3>
           <p className="mb-2 line-clamp-2 text-sm text-gray-500">{product.description}</p>
 
-          <div className="mt-auto flex items-center justify-between gap-2">
-            <span className="font-semibold">{formatMoney(convert(priceUsd), currency)}</span>
+          <div className="mt-auto flex items-end justify-between gap-2">
+            <div className="flex min-w-0 flex-col">
+              <span className="font-semibold tabular-nums">
+                {formatMoney(convert(priceUsd), currency)}
+              </span>
+              {/*
+                The USD original sits under the converted price whenever the
+                shopper isn't already in USD. Orders are stored in USD, so this
+                is the number they will actually be charged - showing only the
+                approximate conversion asks them to trust a figure the receipt
+                won't match.
+              */}
+              {currency !== 'USD' && (
+                <span className="font-mono text-[0.65rem] leading-tight text-gray-500 tabular-nums">
+                  {formatMoney(priceUsd, 'USD')} USD
+                </span>
+              )}
+            </div>
             {/* z-10 keeps the button clickable above the stretched link. */}
             <Button
               size="sm"

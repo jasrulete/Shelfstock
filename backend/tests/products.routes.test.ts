@@ -158,3 +158,38 @@ describe('product write endpoints (admin-gated validation)', () => {
     expect(poolQuery).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /api/products/low-stock (public storefront rail)', () => {
+  it('excludes sold-out products and orders by scarcity', async () => {
+    poolQuery.mockResolvedValue({ rows: [{ id: 2, name: 'Keyboard', stock: 3 }] });
+
+    const res = await request(app).get('/api/products/low-stock');
+
+    expect(res.status).toBe(200);
+    const [sql] = poolQuery.mock.calls[0];
+    // A "0 left" row has nothing to sell, so it must never reach the storefront.
+    expect(sql).toContain('stock > 0');
+    expect(sql).toContain('ORDER BY stock ASC');
+    expect(res.body).toEqual([{ id: 2, name: 'Keyboard', stock: 3 }]);
+  });
+
+  it('binds threshold and limit, capping both', async () => {
+    poolQuery.mockResolvedValue({ rows: [] });
+
+    await request(app).get('/api/products/low-stock?threshold=999&limit=999');
+
+    // threshold caps at 20, limit at 12 - an unbounded rail would let a query
+    // string dump the whole catalogue onto the homepage.
+    expect(poolQuery.mock.calls[0][1]).toEqual([20, 12]);
+  });
+
+  it('is not swallowed by the /:id route', async () => {
+    poolQuery.mockResolvedValue({ rows: [] });
+
+    const res = await request(app).get('/api/products/low-stock');
+
+    // If '/:id' were declared first, parseId('low-stock') would 404 this.
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+});
