@@ -70,6 +70,25 @@ CREATE TABLE IF NOT EXISTS order_items (
   price_at_purchase NUMERIC(10, 2) NOT NULL CHECK (price_at_purchase >= 0)
 );
 
+-- Additional product photography.
+--
+-- products.image_url stays the cover shot: it's what listings, the cart and
+-- search results use, and every one of those wants exactly one image. This
+-- table holds the *extra* angles the detail page shows, so adding a gallery
+-- never risks changing which image a product card picks.
+--
+-- position orders the strip; ties fall back to id so the order is stable.
+CREATE TABLE IF NOT EXISTS product_images (
+  id         SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  url        TEXT NOT NULL,
+  position   SMALLINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_product_id
+  ON product_images(product_id, position);
+
 -- Product reviews.
 --
 -- UNIQUE (product_id, user_id) is the anti-spam rule: one review per person
@@ -152,3 +171,25 @@ FROM (
 ) AS seed(name, url)
 WHERE products.name = seed.name
   AND products.image_url LIKE '%placehold.co%';
+
+-- Gallery seed.
+--
+-- Only the building blocks get a second shot, and that is deliberate. These
+-- are stock photographs, so a "second angle" of the keyboard or the bottle is
+-- in fact a different keyboard and a different bottle - which on a store whose
+-- whole claim is that the listing matches the shelf would be the worst
+-- possible thing to fake. Loose coloured bricks are generic enough that two
+-- photographs honestly depict the same product.
+--
+-- Everything else carries one image until real photography exists; the gallery
+-- renders a single image without a thumbnail strip.
+INSERT INTO product_images (product_id, url, position)
+SELECT p.id, seed.url, seed.position
+FROM (
+  VALUES
+    ('Building Blocks Set', 'https://images.unsplash.com/photo-1633469924738-52101af51d87?auto=format&fit=crop&w=800&h=800&q=80', 1)
+) AS seed(name, url, position)
+JOIN products p ON p.name = seed.name
+WHERE NOT EXISTS (
+  SELECT 1 FROM product_images pi WHERE pi.product_id = p.id AND pi.url = seed.url
+);

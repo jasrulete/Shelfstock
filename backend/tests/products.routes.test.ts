@@ -193,3 +193,86 @@ describe('GET /api/products/low-stock (public storefront rail)', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 });
+
+describe('GET /api/products/:id (gallery)', () => {
+  it('leads the gallery with the cover image, then extra angles in order', async () => {
+    poolQuery.mockImplementation(async (sql: string) =>
+      sql.includes('FROM product_images')
+        ? { rows: [{ url: 'https://cdn/b.jpg' }, { url: 'https://cdn/c.jpg' }] }
+        : { rows: [{ id: 1, name: 'Blocks', image_url: 'https://cdn/a.jpg' }] }
+    );
+
+    const res = await request(app).get('/api/products/1');
+
+    expect(res.status).toBe(200);
+    expect(res.body.images).toEqual(['https://cdn/a.jpg', 'https://cdn/b.jpg', 'https://cdn/c.jpg']);
+    expect(poolQuery.mock.calls.find(([s]) => (s as string).includes('FROM product_images'))![0])
+      .toContain('ORDER BY position ASC');
+  });
+
+  it('omits a null cover instead of leaving a hole at the front of the gallery', async () => {
+    poolQuery.mockImplementation(async (sql: string) =>
+      sql.includes('FROM product_images')
+        ? { rows: [{ url: 'https://cdn/b.jpg' }] }
+        : { rows: [{ id: 1, name: 'Blocks', image_url: null }] }
+    );
+
+    const res = await request(app).get('/api/products/1');
+
+    expect(res.body.images).toEqual(['https://cdn/b.jpg']);
+  });
+});
+
+describe('GET /api/products/:id/related', () => {
+  it('excludes the product itself and anything sold out', async () => {
+    poolQuery.mockResolvedValue({ rows: [] });
+
+    const res = await request(app).get('/api/products/3/related');
+
+    expect(res.status).toBe(200);
+    const [sql, values] = poolQuery.mock.calls[0];
+    expect(sql).toContain('p.id <> $1');
+    expect(sql).toContain('p.stock > 0');
+    // A recommendation that lands on an out-of-stock page is a dead end.
+    expect(values).toEqual([3, 4]);
+  });
+
+  it('caps the limit', async () => {
+    poolQuery.mockResolvedValue({ rows: [] });
+
+    await request(app).get('/api/products/3/related?limit=999');
+
+    expect(poolQuery.mock.calls[0][1]).toEqual([3, 8]);
+  });
+
+  it('is not swallowed by the /:id route', async () => {
+    poolQuery.mockResolvedValue({ rows: [] });
+
+    const res = await request(app).get('/api/products/3/related');
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+});
+
+describe('product gallery writes', () => {
+  it('rejects a non-array images payload', async () => {
+    const res = await request(app)
+      .put('/api/products/1')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ images: 'https://cdn/a.jpg' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('images must be an array');
+  });
+
+  it('caps the number of gallery images', async () => {
+    const res = await request(app)
+      .put('/api/products/1')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ images: Array.from({ length: 9 }, (_, i) => `https://cdn/${i}.jpg`) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('at most 8');
+  });
+});

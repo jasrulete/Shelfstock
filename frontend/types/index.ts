@@ -13,6 +13,11 @@ export interface Product {
    */
   rating_average?: number;
   rating_count?: number;
+  /**
+   * Cover image first, then any extra angles. Only the detail endpoint returns
+   * this - listings deliberately stay on the single image_url.
+   */
+  images?: string[];
 }
 
 export interface Review {

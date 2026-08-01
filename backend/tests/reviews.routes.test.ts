@@ -91,7 +91,7 @@ describe('POST /api/products/:id/reviews', () => {
   it.each([0, 6, 2.5, '5', null])('rejects an invalid rating: %s', async (rating) => {
     const res = await request(app)
       .post('/api/products/2/reviews')
-      .set('Authorization', `Bearer ${tokenFor({ userId: 1, role: 'customer' })}`)
+      .set('Authorization', `Bearer ${tokenFor(1, 'customer')}`)
       .send({ rating });
 
     expect(res.status).toBe(400);
@@ -107,7 +107,7 @@ describe('POST /api/products/:id/reviews', () => {
 
     const res = await request(app)
       .post('/api/products/2/reviews')
-      .set('Authorization', `Bearer ${tokenFor({ userId: 9, role: 'customer' })}`)
+      .set('Authorization', `Bearer ${tokenFor(9, 'customer')}`)
       .send({ rating: 5, body: 'Excellent' });
 
     expect(res.status).toBe(201);
@@ -125,7 +125,7 @@ describe('POST /api/products/:id/reviews', () => {
 
     await request(app)
       .post('/api/products/2/reviews')
-      .set('Authorization', `Bearer ${tokenFor({ userId: 9, role: 'customer' })}`)
+      .set('Authorization', `Bearer ${tokenFor(9, 'customer')}`)
       .send({ rating: 3 });
 
     expect(callWith('INSERT INTO reviews')![1]).toContain(false);
@@ -138,7 +138,7 @@ describe('POST /api/products/:id/reviews', () => {
 
     await request(app)
       .post('/api/products/2/reviews')
-      .set('Authorization', `Bearer ${tokenFor({ userId: 9, role: 'customer' })}`)
+      .set('Authorization', `Bearer ${tokenFor(9, 'customer')}`)
       .send({ rating: 4 });
 
     expect(callWith('INSERT INTO reviews')![0]).toContain('ON CONFLICT (product_id, user_id)');
@@ -149,7 +149,7 @@ describe('POST /api/products/:id/reviews', () => {
 
     const res = await request(app)
       .post('/api/products/999/reviews')
-      .set('Authorization', `Bearer ${tokenFor({ userId: 1, role: 'customer' })}`)
+      .set('Authorization', `Bearer ${tokenFor(1, 'customer')}`)
       .send({ rating: 5 });
 
     expect(res.status).toBe(404);
