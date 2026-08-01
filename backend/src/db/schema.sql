@@ -101,11 +101,28 @@ ON CONFLICT (name) DO NOTHING;
 INSERT INTO products (name, description, price, category, stock, image_url)
 SELECT * FROM (
   VALUES
-    ('Wireless Mouse', 'Ergonomic 2.4GHz wireless mouse with USB receiver.', 19.99, 'Electronics', 150, 'https://placehold.co/400x400?text=Mouse'),
-    ('Mechanical Keyboard', 'Hot-swappable mechanical keyboard, brown switches.', 79.99, 'Electronics', 60, 'https://placehold.co/400x400?text=Keyboard'),
-    ('Stainless Steel Water Bottle', 'Insulated 750ml bottle, keeps drinks cold 24h.', 24.50, 'Home & Kitchen', 200, 'https://placehold.co/400x400?text=Bottle'),
-    ('The Pragmatic Programmer', 'Classic software engineering book.', 34.00, 'Books', 80, 'https://placehold.co/400x400?text=Book'),
-    ('Cotton T-Shirt', 'Plain crew-neck cotton t-shirt.', 12.99, 'Apparel', 300, 'https://placehold.co/400x400?text=Shirt'),
-    ('Building Blocks Set', '250-piece creative building blocks.', 29.99, 'Toys', 90, 'https://placehold.co/400x400?text=Blocks')
+    ('Wireless Mouse', 'Ergonomic 2.4GHz wireless mouse with USB receiver.', 19.99, 'Electronics', 150, 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Mechanical Keyboard', 'Hot-swappable mechanical keyboard, brown switches.', 79.99, 'Electronics', 60, 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Stainless Steel Water Bottle', 'Insulated 750ml bottle, keeps drinks cold 24h.', 24.50, 'Home & Kitchen', 200, 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('The Pragmatic Programmer', 'Classic software engineering book.', 34.00, 'Books', 80, 'https://images.unsplash.com/photo-1580121441575-41bcb5c6b47c?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Cotton T-Shirt', 'Plain crew-neck cotton t-shirt.', 12.99, 'Apparel', 300, 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Building Blocks Set', '250-piece creative building blocks.', 29.99, 'Toys', 90, 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=800&h=800&q=80')
 ) AS seed(name, description, price, category, stock, image_url)
 WHERE NOT EXISTS (SELECT 1 FROM products);
+
+-- Databases seeded before this change still hold placehold.co grey boxes, and
+-- the INSERT above is skipped once products exist. This backfills real
+-- photography for those rows only: the LIKE guard means it never touches an
+-- image an admin has since set by hand, and re-running it is a no-op.
+UPDATE products SET image_url = seed.url
+FROM (
+  VALUES
+    ('Wireless Mouse', 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Mechanical Keyboard', 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Stainless Steel Water Bottle', 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('The Pragmatic Programmer', 'https://images.unsplash.com/photo-1580121441575-41bcb5c6b47c?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Cotton T-Shirt', 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Building Blocks Set', 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=800&h=800&q=80')
+) AS seed(name, url)
+WHERE products.name = seed.name
+  AND products.image_url LIKE '%placehold.co%';

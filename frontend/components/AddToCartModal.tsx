@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
+import ProductImage from './ui/ProductImage';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
 import { useCart } from '@/hooks/useCart';
@@ -98,15 +98,7 @@ export default function AddToCartModal({
 
         <div className="mt-3 flex items-center gap-3">
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded bg-gray-100">
-            {product.image_url && (
-              <Image
-                src={product.image_url}
-                alt={product.name}
-                fill
-                className="object-cover"
-                sizes="80px"
-              />
-            )}
+            <ProductImage src={product.image_url} alt={product.name} sizes="80px" />
           </div>
           <div>
             <p className="font-medium">{product.name}</p>

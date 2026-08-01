@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import ProductImage from './ui/ProductImage';
 import Link from 'next/link';
 import { useCart } from '@/hooks/useCart';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -72,15 +72,7 @@ export default function CartDrawer() {
         <Card key={product.id} className="flex items-center justify-between gap-4 p-3">
           <Link href={`/products/${product.id}`} className="flex items-center gap-3">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-gray-100">
-              {product.image_url && (
-                <Image
-                  src={product.image_url}
-                  alt={product.name}
-                  fill
-                  className="object-cover"
-                  sizes="64px"
-                />
-              )}
+              <ProductImage src={product.image_url} alt={product.name} sizes="64px" />
             </div>
             <div>
               <p className="font-medium hover:underline">{product.name}</p>

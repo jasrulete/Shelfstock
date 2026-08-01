@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import ProductImage from './ui/ProductImage';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -88,15 +88,8 @@ export default function StorefrontHero() {
                 className="flex items-center gap-3 rounded border border-gray-200 bg-white p-2 transition-colors hover:border-gray-400"
               >
                 <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded bg-gray-100">
-                  {item.image_url && (
-                    <Image
-                      src={item.image_url}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="36px"
-                    />
-                  )}
+                  {/* alt is empty: the product name is the adjacent text. */}
+                  <ProductImage src={item.image_url} alt="" sizes="36px" />
                 </div>
                 <div className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium">{item.name}</span>

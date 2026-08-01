@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import ProductImage from '@/components/ui/ProductImage';
 import { useParams } from 'next/navigation';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -31,9 +31,13 @@ export default function ProductDetailPage() {
   return (
     <div className="grid gap-8 md:grid-cols-2">
       <div className="relative aspect-square overflow-hidden rounded-lg bg-gray-100">
-        {product.image_url && (
-          <Image src={product.image_url} alt={product.name} fill className="object-cover" />
-        )}
+        {/* The hero image of the page - never lazy-load it. */}
+        <ProductImage
+          src={product.image_url}
+          alt={product.name}
+          priority
+          sizes="(max-width: 767px) 100vw, 50vw"
+        />
       </div>
       <div>
         <h1 className="text-2xl font-bold">{product.name}</h1>

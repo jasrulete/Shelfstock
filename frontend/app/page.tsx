@@ -79,8 +79,10 @@ export default function HomePage() {
         </Card>
       ) : (
         <div className={GRID}>
-          {data?.products.map((product) => (
-            <ProductCard key={product.id} product={product} />
+          {data?.products.map((product, i) => (
+            // The first row is above the fold at every breakpoint (4 cards at
+            // the widest); the rest stay lazy.
+            <ProductCard key={product.id} product={product} priority={i < 4} />
           ))}
         </div>
       )}

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -9,6 +8,7 @@ import AddToCartModal from './AddToCartModal';
 import Button from './ui/Button';
 import Card from './ui/Card';
 import Badge from './ui/Badge';
+import ProductImage from './ui/ProductImage';
 
 // Stock is the most characteristic thing ShelfStock knows about a product, so
 // it belongs on the card rather than only on the detail page. Anything above
@@ -34,7 +34,15 @@ function StockBadge({ stock }: { stock: number }) {
   return null;
 }
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  // Set on the first row of the grid: those images are the largest thing above
+  // the fold, and lazy-loading them delays LCP by a round trip.
+  priority = false,
+}: {
+  product: Product;
+  priority?: boolean;
+}) {
   const { currency, convert } = useCurrency();
   const [showModal, setShowModal] = useState(false);
   const priceUsd = Number(product.price);
@@ -53,17 +61,15 @@ export default function ProductCard({ product }: { product: Product }) {
       */}
       <Card className="group relative flex gap-3 p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover sm:flex-col sm:gap-0">
         <div className="relative aspect-square w-24 shrink-0 overflow-hidden rounded bg-gray-100 sm:mb-3 sm:w-full">
-          {product.image_url && (
-            <Image
-              src={product.image_url}
-              alt={product.name}
-              fill
-              className={`object-cover transition-transform duration-300 group-hover:scale-105 ${
-                outOfStock ? 'opacity-50 grayscale' : ''
-              }`}
-              sizes="(max-width: 639px) 96px, (max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
-            />
-          )}
+          <ProductImage
+            src={product.image_url}
+            alt={product.name}
+            priority={priority}
+            className={`transition-transform duration-300 group-hover:scale-105 ${
+              outOfStock ? 'opacity-50 grayscale' : ''
+            }`}
+            sizes="(max-width: 639px) 96px, (max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+          />
           <StockBadge stock={product.stock} />
         </div>
 
