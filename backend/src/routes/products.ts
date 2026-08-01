@@ -2,8 +2,34 @@ import { Router } from 'express';
 import { pool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
+import reviewsRouter from './reviews';
 
 const router = Router();
+
+// Nested resource: /api/products/:productId/reviews. A two-segment path can
+// never collide with the one-segment '/:id' below, but it is mounted first so
+// the nesting is obvious when reading the file top to bottom.
+router.use('/:productId/reviews', reviewsRouter);
+
+/**
+ * Rating aggregate joined onto product reads.
+ *
+ * Grouped once in a subquery rather than a correlated subquery per row, and
+ * left-joined so a product with no reviews still comes back (as 0/0) instead
+ * of disappearing from the listing.
+ */
+const RATING_JOIN = `
+  LEFT JOIN (
+    SELECT product_id, AVG(rating) AS average, COUNT(*) AS total
+    FROM reviews
+    GROUP BY product_id
+  ) r ON r.product_id = p.id
+`;
+
+const RATING_COLUMNS = `
+  COALESCE(r.average, 0)::float AS rating_average,
+  COALESCE(r.total, 0)::int AS rating_count
+`;
 
 const SORTABLE_COLUMNS = new Set(['price', 'name', 'created_at']);
 
@@ -102,8 +128,11 @@ router.get('/', async (req, res) => {
 
     values.push(limitNum, offset);
     const dataResult = await pool.query(
-      `SELECT id, name, description, price, category, stock, image_url, created_at
-       FROM products
+      `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
+              p.created_at,
+              ${RATING_COLUMNS}
+       FROM products p
+       ${RATING_JOIN}
        ${whereClause}
        ORDER BY ${sortColumn} ${sortOrder}
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
@@ -166,7 +195,13 @@ router.get('/:id', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    const result = await pool.query(
+      `SELECT p.*, ${RATING_COLUMNS}
+       FROM products p
+       ${RATING_JOIN}
+       WHERE p.id = $1`,
+      [id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }

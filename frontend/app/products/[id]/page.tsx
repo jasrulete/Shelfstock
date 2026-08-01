@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import ProductImage from '@/components/ui/ProductImage';
+import StarRating from '@/components/ui/StarRating';
+import ProductReviews from '@/components/ProductReviews';
 import { useParams } from 'next/navigation';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -42,9 +44,25 @@ export default function ProductDetailPage() {
       <div>
         <h1 className="text-2xl font-bold">{product.name}</h1>
         <p className="mt-1 text-sm text-gray-500">{product.category}</p>
-        <p className="mt-4 text-2xl font-semibold">
+
+        {(product.rating_count ?? 0) > 0 && (
+          <a href="#reviews" className="mt-2 inline-flex hover:underline">
+            <StarRating
+              average={product.rating_average ?? 0}
+              count={product.rating_count}
+              size="md"
+            />
+          </a>
+        )}
+
+        <p className="mt-4 text-2xl font-semibold tabular-nums">
           {formatMoney(convert(Number(product.price)), currency)}
         </p>
+        {currency !== 'USD' && (
+          <p className="font-mono text-xs text-gray-500 tabular-nums">
+            {formatMoney(Number(product.price), 'USD')} USD
+          </p>
+        )}
         <p className="mt-4 text-gray-700">{product.description}</p>
         {/* Colours here are one step darker than the obvious amber-600/red-600
             so each clears 4.5:1 against white. */}
@@ -80,6 +98,11 @@ export default function ProductDetailPage() {
             Add to cart
           </Button>
         </div>
+      </div>
+
+      {/* Full width beneath both columns of the product grid. */}
+      <div id="reviews" className="md:col-span-2">
+        <ProductReviews productId={String(params.id)} />
       </div>
     </div>
   );

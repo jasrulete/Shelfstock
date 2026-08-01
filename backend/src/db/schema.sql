@@ -70,6 +70,32 @@ CREATE TABLE IF NOT EXISTS order_items (
   price_at_purchase NUMERIC(10, 2) NOT NULL CHECK (price_at_purchase >= 0)
 );
 
+-- Product reviews.
+--
+-- UNIQUE (product_id, user_id) is the anti-spam rule: one review per person
+-- per product, enforced by the database rather than by a check the API could
+-- forget. Editing a review is an UPDATE, not a second row.
+--
+-- verified_purchase follows the Amazon model: anyone signed in may review, and
+-- whether they actually bought the item is recorded and displayed rather than
+-- used to block them. It is computed once at write time from the order history
+-- because it describes the moment the review was written - recomputing it later
+-- would let a cancelled order silently un-verify an honest review.
+CREATE TABLE IF NOT EXISTS reviews (
+  id                SERIAL PRIMARY KEY,
+  product_id        INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating            SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body              TEXT,
+  verified_purchase BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (product_id, user_id)
+);
+
+-- Every product card and listing asks "what is this product's average?", so the
+-- aggregate is grouped by product_id on read.
+CREATE INDEX IF NOT EXISTS idx_reviews_product_id ON reviews(product_id);
+
 -- One row per win-back email sent. The win-back job only emails a customer
 -- if no row exists newer than their last order, so each lapse gets at most
 -- one email no matter how often the job runs.

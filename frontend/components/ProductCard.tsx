@@ -9,6 +9,7 @@ import Button from './ui/Button';
 import Card from './ui/Card';
 import Badge from './ui/Badge';
 import ProductImage from './ui/ProductImage';
+import StarRating from './ui/StarRating';
 
 // Stock is the most characteristic thing ShelfStock knows about a product, so
 // it belongs on the card rather than only on the detail page. Anything above
@@ -88,6 +89,19 @@ export default function ProductCard({
               {product.name}
             </Link>
           </h3>
+          {/*
+            Only rendered once a product actually has reviews. An empty row of
+            grey stars on every card reads as "nobody bought this" and costs
+            more trust than the space it fills.
+          */}
+          {(product.rating_count ?? 0) > 0 && (
+            <StarRating
+              average={product.rating_average ?? 0}
+              count={product.rating_count}
+              className="mb-1"
+            />
+          )}
+
           <p className="mb-2 line-clamp-2 text-sm text-gray-500">{product.description}</p>
 
           <div className="mt-auto flex items-end justify-between gap-2">
