@@ -10,7 +10,8 @@ Cash-on-Delivery checkout with shipping details, a full order lifecycle
 and an admin area with analytics, product management, and order fulfillment.
 
 **Stack:** Next.js 14 (App Router) + TypeScript + Tailwind on the frontend,
-Express + TypeScript + PostgreSQL on the backend. No paid services required.
+Express + TypeScript + PostgreSQL for the API, which runs inside the Next.js
+deployment as a serverless function. No paid services required.
 
 ## 🐳 Run with Docker
 
@@ -23,7 +24,7 @@ docker compose up -d --build
 ```
 
 Then open **http://localhost:3000**. On the first start Docker builds both
-images (a few minutes) and Postgres applies `backend/src/db/schema.sql`
+images (a few minutes) and Postgres applies `frontend/db/schema.sql`
 automatically, so the store comes up with demo products already seeded.
 
 ### What's running
@@ -31,12 +32,12 @@ automatically, so the store comes up with demo products already seeded.
 | Service | Image / build          | Container port | Host port (default) | Purpose                                              |
 | ------- | ---------------------- | -------------- | ------------------- | ---------------------------------------------------- |
 | `web`   | `frontend/Dockerfile`  | 3000           | `3000`              | Next.js storefront + admin UI                        |
-| `api`   | `backend/Dockerfile`   | 4000           | `4000`              | Express REST API (`/health`, `/api/*`)               |
 | `db`    | `postgres:17-alpine`   | 5432           | `5433`              | PostgreSQL; data persists in the `db_data` volume    |
 
-Startup is ordered by healthchecks: `db` must pass `pg_isready` before `api`
-starts, and `api` must answer `/health` before `web` starts. Check status with
-`docker compose ps`, logs with `docker compose logs -f api`.
+Startup is ordered by healthchecks: `db` must pass `pg_isready` before `web`
+starts, and `web` must answer `/api/health` (which touches Postgres) before it
+is considered ready. Check status with
+`docker compose ps`, logs with `docker compose logs -f web`.
 
 `db` is published on host port **5433** (not 5432) so it never clashes with a
 locally installed Postgres. Connect to it with
@@ -45,13 +46,12 @@ locally installed Postgres. Connect to it with
 ### Environment variables
 
 Everything works out of the box with the defaults below. Override any of them
-inline (`API_PORT=4001 docker compose up -d --build`) or via a `.env` file
+inline (`WEB_PORT=3001 docker compose up -d --build`) or via a `.env` file
 next to `docker-compose.yml`.
 
 | Variable     | Default                                     | Purpose                                                                                       |
 | ------------ | ------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `WEB_PORT`   | `3000`                                      | Host port for the storefront. The API's `CORS_ORIGIN` follows it automatically.               |
-| `API_PORT`   | `4000`                                      | Host port for the API. Baked into the frontend bundle as `NEXT_PUBLIC_API_URL` at build time — changing it requires `--build`. |
+| `WEB_PORT`   | `3000`                                      | Host port for the storefront (which also serves `/api`).               |
 | `DB_PORT`    | `5433`                                      | Host port for Postgres (container-internal traffic always uses 5432).                         |
 | `JWT_SECRET` | `dev-only-insecure-secret-change-me-please` | Signs JWTs. Fine for a local demo; set a real one (`openssl rand -hex 32`) for anything else. |
 
@@ -67,7 +67,7 @@ email) is intentionally unset — the win-back email job just skips itself.
 Seed two ready-to-use accounts (one per side of the app):
 
 ```bash
-docker compose exec api node scripts/seed-demo-users.js
+docker compose exec web node scripts/seed-demo-users.js
 ```
 
 | Role | Email | Password |
@@ -82,10 +82,10 @@ real users, products, or orders. On a hosted database, run it wherever
 ### Create your own admin user
 
 Register an account normally at http://localhost:3000/register, then promote
-it from inside the `api` container:
+it from inside the `web` container:
 
 ```bash
-docker compose exec api node scripts/create-admin.js you@example.com
+docker compose exec web node scripts/create-admin.js you@example.com
 ```
 
 Log out and back in; the Dashboard / Products / Manage Orders links appear.
@@ -136,20 +136,19 @@ docker compose down        # stops containers; keeps the database volume
 ```
 shelfstock/
   frontend/   Next.js app (Vercel)
-  backend/    Express API (Railway/Render)
 ```
 
 ## Key engineering decisions (for interview walkthroughs)
 
 - **Price snapshotting** — `order_items.price_at_purchase` is copied from the
   product's price at checkout time, not a live reference to `products.price`.
-  See the comment block in `backend/src/db/schema.sql` and
-  `backend/src/routes/orders.ts`.
+  See the comment block in `frontend/db/schema.sql` and
+  `frontend/server/routes/orders.ts`.
 - **Row-level authorization** — `GET /api/orders/:id` checks
   `req.user.id === order.user_id` in the handler itself; a valid JWT alone
-  isn't enough to read someone else's order. See `backend/src/routes/orders.ts`.
+  isn't enough to read someone else's order. See `frontend/server/routes/orders.ts`.
 - **Server-side pagination** — `LIMIT`/`OFFSET` in SQL, not "fetch everything
-  and slice in JS." See `backend/src/routes/products.ts`.
+  and slice in JS." See `frontend/server/routes/products.ts`.
 - **Debounce + AbortController** — the product search box waits 400ms after
   typing stops, and cancels any in-flight request when a newer one starts, so
   a slow response for an old keystroke can't overwrite a newer result. See
@@ -159,7 +158,7 @@ shelfstock/
   API is down or rate-limited. See `frontend/hooks/useExchangeRates.ts`.
 - **Row locking on checkout** — `SELECT ... FOR UPDATE` on the product row
   during order creation prevents two simultaneous checkouts from overselling
-  the last unit of stock. See `backend/src/routes/orders.ts`.
+  the last unit of stock. See `frontend/server/routes/orders.ts`.
 
 ## Testing
 
@@ -170,7 +169,7 @@ price snapshotting (a hostile client-supplied price is ignored), stock
 decrement/restore, and row-level authorization.
 
 ```bash
-cd backend && npm test
+cd frontend && npm test
 ```
 
 **End-to-end smoke test** — the same invariants exercised against the real,
@@ -179,9 +178,9 @@ decrement → snapshot → cross-user 404 → admin lifecycle → cancellation s
 restore → analytics.
 
 ```bash
-docker compose up -d --wait db api
+docker compose up -d --wait
 PROMOTE_CMD="docker compose exec -T db psql -U postgres -d shelfstock -c \"UPDATE users SET role='admin' WHERE email='{EMAIL}'\"" \
-  node backend/scripts/e2e-smoke.mjs
+  node frontend/scripts/e2e-smoke.mjs
 docker compose down -v
 ```
 
@@ -200,7 +199,7 @@ the smoke test against them.
 ### 1. Clone and install
 
 ```bash
-cd shelfstock/backend
+cd shelfstock/frontend
 npm install
 
 cd ../frontend
@@ -210,7 +209,7 @@ npm install
 ### 2. Configure environment variables
 
 ```bash
-cd shelfstock/backend
+cd shelfstock/frontend
 cp .env.example .env
 # edit .env: set DATABASE_URL to your local Postgres, and set JWT_SECRET
 # (generate one with: openssl rand -hex 32)
@@ -224,7 +223,7 @@ cp .env.example .env.local
 
 ```bash
 createdb shelfstock
-cd shelfstock/backend
+cd shelfstock/frontend
 npm run db:setup   # runs src/db/schema.sql against DATABASE_URL
 ```
 
@@ -241,50 +240,51 @@ new columns/constraints (it's also how you migrate a deployed DB).
 Register an account through the app first, then promote it:
 
 ```bash
-cd shelfstock/backend
+cd shelfstock/frontend
 npm run create-admin -- you@example.com
 ```
 
 Admins see the Dashboard, Products, and Manage Orders links in the nav.
 
-### 5. Run both apps
+### 5. Run the app
+
+There is only one app to start - the API is served by the same Next.js process.
 
 ```bash
-# terminal 1
-cd shelfstock/backend
-npm run dev        # http://localhost:4000
-
-# terminal 2
 cd shelfstock/frontend
 npm run dev         # http://localhost:3000
 ```
 
-Visit `http://localhost:3000`.
+Visit `http://localhost:3000`. The API is at `http://localhost:3000/api`.
 
 ## Deployment (free tiers)
 
-### Backend → Railway or Render
+The app deploys as a single unit: the Express API runs inside the Next.js
+deployment as a serverless function, so there is no separate backend service to
+host, no CORS origin to keep in sync, and no API URL baked into the browser
+bundle that can outlive the server it points at.
 
-1. Push this repo to GitHub.
-2. Create a new Railway/Render project from the `backend/` directory
-   (set the root directory if the platform asks).
-3. Add a PostgreSQL plugin/service — both Railway and Render offer a free
-   Postgres instance.
-4. Set env vars: `DATABASE_URL` (from the Postgres plugin), `JWT_SECRET`,
-   `CORS_ORIGIN` (your Vercel frontend URL once you have it), `PORT` (usually
-   auto-set by the platform).
-5. Build command: `npm run build`. Start command: `npm start`.
-6. Run the schema against the hosted DB:
-   `psql $DATABASE_URL -f src/db/schema.sql` (or run `npm run db:setup` with
-   `DATABASE_URL` pointed at the hosted instance). Re-run it after pulling
-   updates — it's idempotent and applies any new columns/constraints.
+### App → Vercel
 
-### Frontend → Vercel
+1. Import the repo into Vercel and set the root directory to `frontend/`.
+2. Env vars:
+   - `DATABASE_URL` — your Postgres connection string. Use the **pooled**
+     one if your provider offers it (Neon's contains `-pooler`); serverless
+     opens many short-lived connections and the direct string will run out.
+   - `JWT_SECRET` — 32+ characters, e.g. `openssl rand -hex 32`.
+   - `CRON_SECRET` — required for the daily win-back job; without it the cron
+     endpoint refuses to run rather than sitting open.
+   - `RESEND_API_KEY` — optional. Unset means transactional email is a no-op.
+3. Deploy. `vercel.json` registers the win-back cron.
 
-1. Import the repo into Vercel, set the root directory to `frontend/`.
-2. Env vars: `NEXT_PUBLIC_API_URL` = your deployed backend URL,
-   `NEXT_PUBLIC_EXCHANGE_RATE_API` = `https://api.frankfurter.app/latest?from=USD`.
-3. Deploy. Update the backend's `CORS_ORIGIN` to match the resulting Vercel URL.
+### Database → Neon (or any Postgres)
+
+1. Create a free project — no card required.
+2. Apply the schema:
+   `psql "$DATABASE_URL" -f frontend/db/schema.sql`. It is idempotent, so
+   re-run it after pulling updates to pick up new columns and tables.
+3. Optionally seed demo accounts, orders and reviews:
+   `DATABASE_URL=... node frontend/scripts/seed-demo-users.js`.
 
 ## API summary
 

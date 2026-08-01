@@ -3,12 +3,12 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-vi.mock('../src/db', () => ({
+vi.mock('../server/db', () => ({
   pool: { query: vi.fn(), connect: vi.fn() },
 }));
 
-import { pool } from '../src/db';
-import { createApp } from '../src/app';
+import { pool } from '../server/db';
+import { createApp } from '../server/app';
 
 const poolQuery = pool.query as unknown as ReturnType<typeof vi.fn>;
 const app = createApp();

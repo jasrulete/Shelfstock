@@ -2,9 +2,13 @@
 #
 #   docker compose up -d --build
 #
-# Services: db (PostgreSQL 17) -> api (Express, :4000) -> web (Next.js, :3000).
-# All host ports are overridable via env vars (WEB_PORT, API_PORT, DB_PORT) -
-# see the "Run with Docker" section of README.md for details.
+# Services: db (PostgreSQL 17) -> web (Next.js, :3000).
+#
+# There is no longer a separate api service. The Express API runs inside the
+# Next.js deployment as a serverless function (frontend/pages/api/[...path].ts),
+# so the app is one deployable unit and the browser talks to /api on its own
+# origin. Host ports are overridable via WEB_PORT and DB_PORT - see the
+# "Run with Docker" section of README.md.
 
 services:
   db:
@@ -18,7 +22,7 @@ services:
       # First boot on an empty volume auto-applies the schema + demo seed
       # data. To re-apply later (it's idempotent):
       #   docker compose exec db psql -U postgres -d shelfstock -f /docker-entrypoint-initdb.d/schema.sql
-      - ./backend/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./frontend/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     ports:
       # Host 5433 by default so a locally installed Postgres on 5432 doesn't clash.
       - '${DB_PORT:-5433}:5432'
@@ -31,45 +35,34 @@ services:
       retries: 10
       start_period: 10s
 
-  api:
-    build: ./backend
+  web:
+    build:
+      context: ./frontend
     environment:
       # `db` resolves to the Postgres container on the compose network.
-      # sslmode=disable is required: src/db/index.ts enables SSL for any
-      # non-localhost host, and the bundled Postgres doesn't speak SSL.
+      # sslmode=disable is required: server/db/index.ts enables TLS for any
+      # non-local host, and the bundled Postgres doesn't speak SSL.
       DATABASE_URL: postgres://postgres:postgres@db:5432/shelfstock?sslmode=disable
-      # Dev-only default (the API refuses to boot with fewer than 32 chars).
+      # Dev-only default (the API rejects requests with fewer than 32 chars).
       # Override for anything beyond a local demo:
       #   JWT_SECRET=$(openssl rand -hex 32) docker compose up -d
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-please}
-      # Must match the origin the browser loads the frontend from.
-      CORS_ORIGIN: http://localhost:${WEB_PORT:-3000}
-      PORT: '4000'
+      # No NEXT_PUBLIC_API_URL and no CORS_ORIGIN: the browser calls /api on
+      # the same origin it loaded the page from, so there is nothing to
+      # configure and nothing that can drift out of sync.
     ports:
-      - '${API_PORT:-4000}:4000'
+      - '${WEB_PORT:-3000}:3000'
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:4000/health || exit 1']
+      # /api/health touches Postgres, so this reports ready only when the app
+      # can actually serve data.
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api/health || exit 1']
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 5s
-
-  web:
-    build:
-      context: ./frontend
-      args:
-        # Baked into the browser bundle at build time; the browser runs on
-        # the host, so this points at the host-published API port. If you
-        # change API_PORT, re-run with --build so the bundle picks it up.
-        NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-4000}
-    ports:
-      - '${WEB_PORT:-3000}:3000'
-    depends_on:
-      api:
-        condition: service_healthy
+      start_period: 15s
 
 volumes:
   db_data:

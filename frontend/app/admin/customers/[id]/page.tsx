@@ -23,13 +23,16 @@ function Kpi({ label, value }: { label: string; value: string | number }) {
 export default function AdminCustomerDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
+  // Next 15 types useParams() as possibly null (it is null while a route is
+  // being resolved), so narrow it once here instead of guarding at every use.
+  const id = params?.id ?? '';
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const user = auth.getUser();
     if (!user) {
-      router.replace(`/login?next=/admin/customers/${params.id}`);
+      router.replace(`/login?next=/admin/customers/${id}`);
       return;
     }
     if (user.role !== 'admin') {
@@ -37,10 +40,10 @@ export default function AdminCustomerDetailPage() {
       return;
     }
     api
-      .get<CustomerDetail>(`/api/customers/${params.id}`, { auth: true })
+      .get<CustomerDetail>(`/api/customers/${id}`, { auth: true })
       .then(setCustomer)
       .catch((err: ApiError) => setError(err.message));
-  }, [router, params.id]);
+  }, [router, id]);
 
   if (error)
     return (

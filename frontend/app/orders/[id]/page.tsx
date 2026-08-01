@@ -21,22 +21,25 @@ export default function OrderDetailPage() {
 
 function OrderDetail() {
   const params = useParams<{ id: string }>();
+  // Next 15 types useParams() as possibly null (it is null while a route is
+  // being resolved), so narrow it once here instead of guarding at every use.
+  const id = params?.id ?? '';
   const searchParams = useSearchParams();
   const router = useRouter();
-  const justPlaced = searchParams.get('placed') === '1';
+  const justPlaced = searchParams?.get('placed') === '1';
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth.isLoggedIn()) {
-      router.replace(`/login?next=/orders/${params.id}`);
+      router.replace(`/login?next=/orders/${id}`);
       return;
     }
     api
-      .get<Order>(`/api/orders/${params.id}`, { auth: true })
+      .get<Order>(`/api/orders/${id}`, { auth: true })
       .then(setOrder)
       .catch((err: ApiError) => setError(err.message));
-  }, [params.id, router]);
+  }, [id, router]);
 
   if (error)
     return (

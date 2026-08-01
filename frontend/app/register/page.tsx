@@ -37,7 +37,7 @@ function RegisterForm() {
       });
       auth.saveSession(res.token, res.user);
       // Only follow internal paths - see the same guard on /login.
-      const next = searchParams.get('next');
+      const next = searchParams?.get('next');
       router.push(next && next.startsWith('/') && !next.startsWith('//') ? next : '/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Registration failed');

@@ -54,14 +54,11 @@ export async function runWinbackJob(): Promise<void> {
   console.log(`Win-back job: ${sent}/${result.rows.length} emails sent`);
 }
 
-export function startWinbackSchedule(): void {
-  if (!process.env.RESEND_API_KEY) {
-    console.log('Win-back job disabled (RESEND_API_KEY not set)');
-    return;
-  }
-  const run = () => runWinbackJob().catch((err) => console.error('Win-back job error:', err));
-  // Shortly after boot (so a daily Railway redeploy still runs it), then
-  // every 24h for long-lived processes.
-  setTimeout(run, 15_000);
-  setInterval(run, 24 * 60 * 60 * 1000);
-}
+// The in-process scheduler (setTimeout + 24h setInterval) that used to live
+// here is gone: a serverless function only exists for the duration of a
+// request, so a timer would never fire. The same daily cadence now comes from
+// Vercel Cron hitting /api/cron/winback - see vercel.json.
+//
+// The dedup guarantee is unchanged and still lives in SQL: a winback_emails
+// row newer than the customer's last order means the lapse was already
+// handled, so a double-triggered cron cannot double-send.

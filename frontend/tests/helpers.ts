@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import type { UserRole } from '../src/types';
+import type { UserRole } from '../server/types';
 
 /** Signs a JWT the same way routes/auth.ts does, using the test secret. */
 export function tokenFor(userId: number, role: UserRole = 'customer'): string {

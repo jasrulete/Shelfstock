@@ -17,6 +17,9 @@ import { Input } from '@/components/ui/Field';
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
+  // Next 15 types useParams() as possibly null (it is null while a route is
+  // being resolved), so narrow it once here instead of guarding at every use.
+  const id = params?.id ?? '';
   const [product, setProduct] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -25,10 +28,10 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     api
-      .get<Product>(`/api/products/${params.id}`)
+      .get<Product>(`/api/products/${id}`)
       .then(setProduct)
       .catch((err: ApiError) => setError(err.message));
-  }, [params.id]);
+  }, [id]);
 
   if (error)
     return (
@@ -130,12 +133,12 @@ export default function ProductDetailPage() {
       </div>
 
       <div id="reviews">
-        <ProductReviews productId={String(params.id)} />
+        <ProductReviews productId={String(id)} />
       </div>
 
       <ProductFaq />
 
-      <RelatedProducts productId={String(params.id)} category={product.category} />
+      <RelatedProducts productId={String(id)} category={product.category} />
     </div>
   );
 }

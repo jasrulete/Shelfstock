@@ -5,33 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# The separate backend job is gone with the backend directory: the Express API
+# now runs inside the Next.js deployment, so one job covers the whole app.
 jobs:
-  backend:
-    name: Backend (typecheck + tests)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Unit tests
-        run: npm test
-
-  frontend:
-    name: Frontend (build)
+  app:
+    name: App (lint + typecheck + tests + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,12 +32,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         run: npm run build
-        env:
-          # Dummy values so the static build succeeds; real values are set
-          # at deploy time.
-          NEXT_PUBLIC_API_URL: http://localhost:4000
 
       # Fails the build on a known-vulnerable dependency. Scoped to high and
       # above so a low-severity advisory in a dev tool can't block a deploy,
@@ -77,17 +54,21 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build and start db + api containers
-        run: docker compose up -d --wait --build db api
+      # `--wait` blocks on the web healthcheck, which calls /api/health and so
+      # only passes once the serverless API can actually reach Postgres.
+      - name: Build and start the stack
+        run: docker compose up -d --wait --build
 
       - name: Run end-to-end smoke test
-        run: node backend/scripts/e2e-smoke.mjs
+        run: node frontend/scripts/e2e-smoke.mjs
         env:
+          # Same origin as the app now - there is no separate API port.
+          API_URL: http://localhost:3000/api
           PROMOTE_CMD: docker compose exec -T db psql -U postgres -d shelfstock -c "UPDATE users SET role='admin' WHERE email='{EMAIL}'"
 
-      - name: API logs on failure
+      - name: App logs on failure
         if: failure()
-        run: docker compose logs api
+        run: docker compose logs web
 
       - name: Tear down
         if: always()

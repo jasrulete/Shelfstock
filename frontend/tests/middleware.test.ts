@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
-import { requireAuth } from '../src/middleware/auth';
-import { adminOnly } from '../src/middleware/adminOnly';
+import { requireAuth } from '../server/middleware/auth';
+import { adminOnly } from '../server/middleware/adminOnly';
 
 function mockRes() {
   const res: any = {};

@@ -1,6 +1,13 @@
 import { auth as authStore } from '@/lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+/**
+ * The API is served from this same deployment (pages/api/[...path].ts), so
+ * requests are same-origin and relative. There is deliberately no
+ * NEXT_PUBLIC_API_URL any more: baking an absolute backend host into the
+ * bundle at build time is what left the storefront pointing at a dead server
+ * when the old backend went away.
+ */
+const API_URL = '';
 
 class ApiError extends Error {
   status: number;
