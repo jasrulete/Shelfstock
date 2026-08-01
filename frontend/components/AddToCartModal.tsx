@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
 import { useCart } from '@/hooks/useCart';
+import Button from './ui/Button';
+import { Input } from './ui/Field';
 
 export default function AddToCartModal({
   product,
@@ -18,6 +20,51 @@ export default function AddToCartModal({
   const { addItem } = useCart();
   const priceUsd = Number(product.price);
   const maxQty = Math.max(1, product.stock);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Modal behaviour a `role="dialog"` attribute alone doesn't provide:
+   * Escape closes, focus moves into the dialog and is trapped there while it's
+   * open, the page behind can't scroll, and focus returns to whatever opened it
+   * on close.
+   */
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), a[href]'
+      );
+      if (!focusable || focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = overflow;
+      previouslyFocused?.focus();
+    };
+  }, [onClose]);
 
   function clamp(n: number) {
     return Math.min(Math.max(1, n), maxQty);
@@ -30,21 +77,23 @@ export default function AddToCartModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/50 p-4"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={`Add ${product.name} to cart`}
-        className="w-full max-w-sm rounded-lg bg-white p-4 shadow-xl"
+        tabIndex={-1}
+        className="w-full max-w-sm rounded-lg bg-white p-4 shadow-card-hover"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
           <h2 className="font-semibold">Add to cart</h2>
-          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
             ✕
-          </button>
+          </Button>
         </div>
 
         <div className="mt-3 flex items-center gap-3">
@@ -65,21 +114,24 @@ export default function AddToCartModal({
               {formatMoney(convert(priceUsd), currency)} each
             </p>
             {product.stock <= 5 && (
-              <p className="text-xs font-medium text-amber-600">Only {product.stock} left!</p>
+              <p className="text-xs font-medium text-amber-700">Only {product.stock} left</p>
             )}
           </div>
         </div>
 
         <div className="mt-4 flex items-center justify-center gap-2">
-          <button
+          <Button
+            variant="secondary"
+            size="icon"
             onClick={() => setQuantity((q) => clamp(q - 1))}
             disabled={quantity <= 1}
             aria-label="Decrease quantity"
-            className="h-9 w-9 rounded border border-gray-300 text-lg leading-none hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
           >
             −
-          </button>
-          <input
+          </Button>
+          <Input
+            label="Quantity"
+            hideLabel
             type="number"
             min={1}
             max={maxQty}
@@ -88,24 +140,23 @@ export default function AddToCartModal({
               const parsed = parseInt(e.target.value, 10);
               setQuantity(Number.isNaN(parsed) ? 1 : clamp(parsed));
             }}
-            className="w-16 rounded border border-gray-300 px-2 py-1.5 text-center"
+            wrapperClassName="w-16"
+            className="text-center"
           />
-          <button
+          <Button
+            variant="secondary"
+            size="icon"
             onClick={() => setQuantity((q) => clamp(q + 1))}
             disabled={quantity >= maxQty}
             aria-label="Increase quantity"
-            className="h-9 w-9 rounded border border-gray-300 text-lg leading-none hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
           >
             +
-          </button>
+          </Button>
         </div>
 
-        <button
-          onClick={handleAdd}
-          className="mt-4 w-full rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600"
-        >
+        <Button onClick={handleAdd} className="mt-4 w-full">
           Add {quantity} to cart · {formatMoney(convert(priceUsd * quantity), currency)}
-        </button>
+        </Button>
       </div>
     </div>
   );

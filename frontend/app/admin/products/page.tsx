@@ -6,6 +6,9 @@ import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { Product, ProductsResponse } from '@/types';
 import Pagination from '@/components/Pagination';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import { Input, Textarea } from '@/components/ui/Field';
 
 interface ProductForm {
   name: string;
@@ -118,132 +121,130 @@ export default function AdminProductsPage() {
     }
   }
 
-  const inputClass = 'w-full rounded border border-gray-300 px-3 py-2 text-sm';
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Manage Products</h1>
 
-      <form onSubmit={handleSubmit} className="rounded border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 font-semibold">
-          {editingId !== null ? `Edit product #${editingId}` : 'Add a new product'}
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input
-            required
-            maxLength={255}
-            placeholder="Name"
-            value={form.name}
-            onChange={(e) => patchForm({ name: e.target.value })}
-            className={inputClass}
-          />
-          <input
-            required
-            maxLength={100}
-            placeholder="Category"
-            value={form.category}
-            onChange={(e) => patchForm({ category: e.target.value })}
-            className={inputClass}
-          />
-          <input
-            required
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="Price (USD)"
-            value={form.price}
-            onChange={(e) => patchForm({ price: e.target.value })}
-            className={inputClass}
-          />
-          <input
-            required
-            type="number"
-            min={0}
-            step={1}
-            placeholder="Stock"
-            value={form.stock}
-            onChange={(e) => patchForm({ stock: e.target.value })}
-            className={inputClass}
-          />
-          <input
-            type="url"
-            placeholder="Image URL (https://...)"
-            value={form.image_url}
-            onChange={(e) => patchForm({ image_url: e.target.value })}
-            className={`${inputClass} sm:col-span-2`}
-          />
-          <textarea
-            placeholder="Description"
-            value={form.description}
-            onChange={(e) => patchForm({ description: e.target.value })}
-            rows={2}
-            className={`${inputClass} sm:col-span-2`}
-          />
-        </div>
-        {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
-        <div className="mt-3 flex gap-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded bg-brand-500 px-4 py-2 text-sm text-white hover:bg-brand-600 disabled:opacity-60"
-          >
-            {saving ? 'Saving...' : editingId !== null ? 'Save changes' : 'Add product'}
-          </button>
-          {editingId !== null && (
-            <button
-              type="button"
-              onClick={cancelEdit}
-              className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50"
-            >
-              Cancel
-            </button>
+      <Card className="p-4">
+        <form onSubmit={handleSubmit}>
+          <h2 className="mb-3 font-semibold">
+            {editingId !== null ? `Edit product #${editingId}` : 'Add a new product'}
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input
+              label="Name"
+              required
+              maxLength={255}
+              value={form.name}
+              onChange={(e) => patchForm({ name: e.target.value })}
+            />
+            <Input
+              label="Category"
+              required
+              maxLength={100}
+              hint="New categories appear in the storefront filter automatically."
+              value={form.category}
+              onChange={(e) => patchForm({ category: e.target.value })}
+            />
+            <Input
+              label="Price (USD)"
+              type="number"
+              required
+              min={0}
+              step="0.01"
+              value={form.price}
+              onChange={(e) => patchForm({ price: e.target.value })}
+            />
+            <Input
+              label="Stock"
+              type="number"
+              required
+              min={0}
+              step={1}
+              value={form.stock}
+              onChange={(e) => patchForm({ stock: e.target.value })}
+            />
+            <div className="sm:col-span-2">
+              <Input
+                label="Image URL"
+                type="url"
+                placeholder="https://..."
+                value={form.image_url}
+                onChange={(e) => patchForm({ image_url: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Textarea
+                label="Description"
+                rows={2}
+                value={form.description}
+                onChange={(e) => patchForm({ description: e.target.value })}
+              />
+            </div>
+          </div>
+          {error && (
+            <p role="alert" className="mt-2 text-sm font-medium text-red-700">
+              {error}
+            </p>
           )}
-        </div>
-      </form>
+          <div className="mt-4 flex gap-2">
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Saving...' : editingId !== null ? 'Save changes' : 'Add product'}
+            </Button>
+            {editingId !== null && (
+              <Button type="button" variant="secondary" onClick={cancelEdit}>
+                Cancel
+              </Button>
+            )}
+          </div>
+        </form>
+      </Card>
 
       {!data ? (
         <p className="text-gray-500">Loading products...</p>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full rounded border border-gray-200 bg-white text-sm">
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-gray-50 text-left">
-                  <th className="p-2">Name</th>
-                  <th className="p-2">Category</th>
-                  <th className="p-2">Price</th>
-                  <th className="p-2">Stock</th>
-                  <th className="p-2"></th>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <th className="p-2 font-medium text-gray-600">Name</th>
+                  <th className="p-2 font-medium text-gray-600">Category</th>
+                  <th className="p-2 font-medium text-gray-600">Price</th>
+                  <th className="p-2 font-medium text-gray-600">Stock</th>
+                  <th className="p-2">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {data.products.map((product) => (
-                  <tr key={product.id} className="border-b last:border-0">
+                  <tr key={product.id} className="border-b border-gray-200 last:border-0">
                     <td className="p-2">{product.name}</td>
                     <td className="p-2">{product.category}</td>
                     <td className="p-2">${Number(product.price).toFixed(2)}</td>
-                    <td className={`p-2 ${product.stock === 0 ? 'font-semibold text-red-600' : ''}`}>
+                    <td className={`p-2 ${product.stock === 0 ? 'font-semibold text-red-700' : ''}`}>
                       {product.stock}
                     </td>
                     <td className="p-2 text-right">
-                      <button
-                        onClick={() => startEdit(product)}
-                        className="mr-3 text-brand-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product)}
-                        className="text-red-500 hover:underline"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => startEdit(product)}>
+                          Edit
+                          <span className="sr-only"> {product.name}</span>
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={() => handleDelete(product)}>
+                          Delete
+                          <span className="sr-only"> {product.name}</span>
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </Card>
           <Pagination pagination={data.pagination} onPageChange={setPage} />
         </>
       )}

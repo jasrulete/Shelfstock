@@ -6,6 +6,7 @@ import { auth, AUTH_CHANGED_EVENT } from '@/lib/auth';
 import { User } from '@/types';
 import CurrencySelector from './CurrencySelector';
 import { useCart } from '@/hooks/useCart';
+import { buttonClasses } from './ui/Button';
 
 export default function NavBar() {
   const [user, setUser] = useState<User | null>(null);
@@ -29,7 +30,7 @@ export default function NavBar() {
   return (
     <header className="border-b bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Link href="/" className="text-lg font-bold text-brand-700">
+        <Link href="/" className="font-display text-xl font-semibold tracking-tight text-brand-700">
           ShelfStock
         </Link>
 
@@ -56,17 +57,17 @@ export default function NavBar() {
                   <Link href="/admin/customers">Customers</Link>
                 </>
               )}
-              <button onClick={handleLogout} className="text-gray-500 hover:text-gray-800">
+              <button
+                onClick={handleLogout}
+                className="text-gray-500 transition-colors hover:text-gray-900"
+              >
                 Logout
               </button>
             </>
           ) : (
             <>
               <Link href="/login">Login</Link>
-              <Link
-                href="/register"
-                className="rounded bg-brand-500 px-3 py-1.5 text-white hover:bg-brand-600"
-              >
+              <Link href="/register" className={buttonClasses({ size: 'sm' })}>
                 Sign up
               </Link>
             </>

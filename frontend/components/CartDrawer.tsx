@@ -5,6 +5,9 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/hooks/useCart';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
+import Button, { buttonClasses } from './ui/Button';
+import Card from './ui/Card';
+import { Input } from './ui/Field';
 
 // The input holds a local draft so the field can be momentarily empty while
 // the user retypes a number. Committing Number('') = 0 straight to the cart
@@ -13,10 +16,12 @@ import { useCurrency, formatMoney } from '@/lib/currencyContext';
 function QuantityInput({
   value,
   max,
+  productName,
   onCommit,
 }: {
   value: number;
   max: number;
+  productName: string;
   onCommit: (quantity: number) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
@@ -26,7 +31,11 @@ function QuantityInput({
   }, [value]);
 
   return (
-    <input
+    <Input
+      // Naming the product makes each row's control distinguishable when a
+      // screen reader lists them out of visual context.
+      label={`Quantity for ${productName}`}
+      hideLabel
       type="number"
       min={1}
       max={max}
@@ -37,7 +46,7 @@ function QuantityInput({
         if (!Number.isNaN(parsed) && parsed >= 1) onCommit(parsed);
       }}
       onBlur={() => setDraft(String(value))}
-      className="w-16 rounded border border-gray-300 px-2 py-1 text-sm"
+      wrapperClassName="w-16"
     />
   );
 }
@@ -48,25 +57,19 @@ export default function CartDrawer() {
 
   if (items.length === 0) {
     return (
-      <div className="rounded border border-gray-200 bg-white p-8 text-center text-gray-500">
+      <Card className="p-8 text-center text-gray-500">
         <p className="mb-4">Your cart is empty.</p>
-        <Link
-          href="/"
-          className="inline-block rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600"
-        >
+        <Link href="/" className={buttonClasses()}>
           Browse products
         </Link>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-4">
       {items.map(({ product, quantity }) => (
-        <div
-          key={product.id}
-          className="flex items-center justify-between gap-4 rounded border border-gray-200 bg-white p-3"
-        >
+        <Card key={product.id} className="flex items-center justify-between gap-4 p-3">
           <Link href={`/products/${product.id}`} className="flex items-center gap-3">
             <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-gray-100">
               {product.image_url && (
@@ -90,27 +93,23 @@ export default function CartDrawer() {
             <QuantityInput
               value={quantity}
               max={product.stock}
+              productName={product.name}
               onCommit={(q) => updateQuantity(product.id, q)}
             />
-            <button
-              onClick={() => removeItem(product.id)}
-              className="text-sm text-red-500 hover:underline"
-            >
+            <Button variant="danger" size="sm" onClick={() => removeItem(product.id)}>
               Remove
-            </button>
+              <span className="sr-only"> {product.name} from cart</span>
+            </Button>
           </div>
-        </div>
+        </Card>
       ))}
 
-      <div className="flex items-center justify-between border-t pt-4 text-lg font-semibold">
+      <div className="flex items-center justify-between border-t border-gray-200 pt-4 text-lg font-semibold">
         <span>Subtotal</span>
         <span>{formatMoney(convert(subtotal), currency)}</span>
       </div>
 
-      <Link
-        href="/checkout"
-        className="block rounded bg-brand-500 px-4 py-2 text-center text-white hover:bg-brand-600"
-      >
+      <Link href="/checkout" className={buttonClasses({ size: 'lg', className: 'w-full' })}>
         Proceed to checkout
       </Link>
     </div>

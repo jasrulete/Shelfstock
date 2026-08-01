@@ -2,6 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-gray-50 text-gray-900;
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+
+  /* Headings carry the display face; body copy stays on Inter. */
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight;
+  }
+
+  /*
+   * One global keyboard-focus treatment instead of a `focus:` class on every
+   * control. `outline` (not `ring`) is used so it follows each element's own
+   * border-radius and needs no offset colour to sit correctly on both the
+   * gray-50 page background and white cards.
+   *
+   * :focus-visible means mouse clicks don't draw it - only keyboard nav does.
+   */
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.600');
+    outline-offset: 2px;
+    border-radius: theme('borderRadius.DEFAULT');
+  }
+
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,11 +1,12 @@
 import { CustomerSegment } from '@/types';
+import Badge, { BadgeVariant } from './ui/Badge';
 
-const STYLES: Record<CustomerSegment, string> = {
-  vip: 'bg-purple-100 text-purple-800',
-  active: 'bg-green-100 text-green-800',
-  new: 'bg-blue-100 text-blue-800',
-  at_risk: 'bg-amber-100 text-amber-800',
-  prospect: 'bg-gray-200 text-gray-600',
+const VARIANTS: Record<CustomerSegment, BadgeVariant> = {
+  vip: 'accent',
+  active: 'success',
+  new: 'info',
+  at_risk: 'warn',
+  prospect: 'neutral',
 };
 
 const LABELS: Record<CustomerSegment, string> = {
@@ -17,9 +18,5 @@ const LABELS: Record<CustomerSegment, string> = {
 };
 
 export default function SegmentBadge({ segment }: { segment: CustomerSegment }) {
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STYLES[segment]}`}>
-      {LABELS[segment]}
-    </span>
-  );
+  return <Badge variant={VARIANTS[segment]}>{LABELS[segment]}</Badge>;
 }

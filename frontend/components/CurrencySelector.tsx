@@ -23,8 +23,12 @@ export default function CurrencySelector() {
         ))}
       </select>
       {isFallback && (
-        <span title="Live rates unavailable - showing approximate rates" className="text-amber-500">
-          ⚠
+        <span className="text-amber-700">
+          <span aria-hidden="true">⚠</span>
+          {/* title= alone is invisible to keyboard and screen-reader users. */}
+          <span className="sr-only">
+            Live exchange rates are unavailable — prices shown are approximate.
+          </span>
         </span>
       )}
     </div>

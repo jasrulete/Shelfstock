@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import Card from './ui/Card';
 
 interface RevenuePoint {
   period: string;
@@ -23,16 +24,20 @@ export default function SalesChart({ data }: { data: RevenuePoint[] }) {
   }));
 
   return (
-    <div className="h-72 w-full rounded border border-gray-200 bg-white p-4">
+    <Card className="h-72 w-full p-4">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={formatted}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="label" fontSize={12} />
-          <YAxis fontSize={12} />
-          <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+          {/* Grid/axis strokes follow the warm neutral ramp, not recharts' cool default. */}
+          <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+          <XAxis dataKey="label" fontSize={12} stroke="#78716c" />
+          <YAxis fontSize={12} stroke="#78716c" />
+          <Tooltip
+            formatter={(value: number) => `$${value.toFixed(2)}`}
+            contentStyle={{ borderRadius: '0.5rem', border: '1px solid #e7e5e4', fontSize: 12 }}
+          />
           <Bar dataKey="revenue" fill="#1f8a53" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 }

@@ -7,6 +7,8 @@ import { Order } from '@/types';
 import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
+import Card from '@/components/ui/Card';
+import { buttonClasses } from '@/components/ui/Button';
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -29,25 +31,27 @@ export default function OrdersPage() {
   }, [router]);
 
   if (loading) return <p className="text-gray-500">Loading orders...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (error)
+    return (
+      <p role="alert" className="font-medium text-red-700">
+        {error}
+      </p>
+    );
   if (orders.length === 0)
     return (
-      <div className="rounded border border-gray-200 bg-white p-8 text-center text-gray-500">
+      <Card className="p-8 text-center text-gray-500">
         <p className="mb-4">You haven&apos;t placed any orders yet.</p>
-        <Link
-          href="/"
-          className="inline-block rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600"
-        >
+        <Link href="/" className={buttonClasses()}>
           Start shopping
         </Link>
-      </div>
+      </Card>
     );
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Order History</h1>
       {orders.map((order) => (
-        <div key={order.id} className="rounded border border-gray-200 bg-white p-4">
+        <Card key={order.id} className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Link href={`/orders/${order.id}`} className="font-medium text-brand-600 underline">
@@ -63,7 +67,7 @@ export default function OrdersPage() {
             {order.items.map((item) => (
               <li key={item.id}>
                 {item.product_name} × {item.quantity} @ ${item.price_at_purchase}{' '}
-                <span className="text-gray-400">(price at time of purchase)</span>
+                <span className="text-gray-500">(price at time of purchase)</span>
               </li>
             ))}
           </ul>
@@ -73,7 +77,7 @@ export default function OrdersPage() {
               ${order.total_amount} {order.currency}
             </span>
           </div>
-        </div>
+        </Card>
       ))}
     </div>
   );

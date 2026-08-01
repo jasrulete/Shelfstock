@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { controlClasses } from './ui/Field';
 
 // Address suggestions from Photon (photon.komoot.io), komoot's free
 // OpenStreetMap geocoder. Chosen over OSM's own Nominatim because the
@@ -45,18 +46,20 @@ function toSuggestion(f: PhotonFeature): Suggestion {
 }
 
 export default function AddressAutocomplete({
+  label,
   value,
   onChange,
   onSelect,
-  className,
+  hint,
   placeholder,
   maxLength,
   required,
 }: {
+  label: string;
   value: string;
   onChange: (value: string) => void;
   onSelect: (s: { address: string; city: string }) => void;
-  className?: string;
+  hint?: string;
   placeholder?: string;
   maxLength?: number;
   required?: boolean;
@@ -64,6 +67,9 @@ export default function AddressAutocomplete({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
+  const inputId = useId();
+  const listId = `${inputId}-listbox`;
+  const hintId = `${inputId}-hint`;
   // Set when the user picks a suggestion, so the value change it causes
   // doesn't immediately trigger another lookup and reopen the list.
   const skipNextLookup = useRef(false);
@@ -133,44 +139,76 @@ export default function AddressAutocomplete({
   }
 
   return (
-    <div className="relative">
-      <input
-        required={required}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={() => setOpen(false)}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={open}
-        aria-autocomplete="list"
-        className={className}
-      />
-      {open && (
-        <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded border border-gray-200 bg-white text-sm shadow-lg">
-          {suggestions.map((s, i) => (
-            <li key={s.label}>
-              <button
-                type="button"
+    <div className="space-y-1.5">
+      <label htmlFor={inputId} className="block text-sm font-medium text-gray-700">
+        {label}
+        {required && (
+          <span className="ml-0.5 text-red-700" aria-hidden="true">
+            *
+          </span>
+        )}
+      </label>
+
+      <div className="relative">
+        <input
+          id={inputId}
+          required={required}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => setOpen(false)}
+          // Browser autofill is suppressed because this field runs its own
+          // suggestion list; street-address autofill would fight it.
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            open && highlighted >= 0 ? `${inputId}-option-${highlighted}` : undefined
+          }
+          aria-describedby={hint ? hintId : undefined}
+          className={controlClasses(false)}
+        />
+
+        {open && (
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label="Address suggestions"
+            className="absolute z-10 mt-1 w-full overflow-hidden rounded border border-gray-200 bg-white text-sm shadow-card-hover"
+          >
+            {suggestions.map((s, i) => (
+              <li
+                key={s.label}
+                id={`${inputId}-option-${i}`}
+                role="option"
+                aria-selected={i === highlighted}
                 // onMouseDown fires before the input's blur closes the list.
                 onMouseDown={(e) => {
                   e.preventDefault();
                   select(s);
                 }}
-                className={`block w-full px-3 py-2 text-left ${
+                className={`cursor-pointer px-3 py-2 ${
                   i === highlighted ? 'bg-brand-50 text-brand-700' : 'hover:bg-gray-50'
                 }`}
               >
                 {s.label}
-              </button>
-            </li>
-          ))}
-          <li className="border-t bg-gray-50 px-3 py-1 text-xs text-gray-400">
-            Suggestions © OpenStreetMap contributors
-          </li>
-        </ul>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {hint && (
+        <p id={hintId} className="text-xs text-gray-500">
+          {hint}
+        </p>
+      )}
+      {open && (
+        <p className="text-xs text-gray-500">Suggestions © OpenStreetMap contributors</p>
       )}
     </div>
   );
