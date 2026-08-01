@@ -6,6 +6,7 @@ import analyticsRoutes from './routes/analytics';
 import authRoutes from './routes/auth';
 import categoriesRoutes from './routes/categories';
 import customersRoutes from './routes/customers';
+import devicesRoutes from './routes/devices';
 import ordersRoutes from './routes/orders';
 import productsRoutes from './routes/products';
 
@@ -46,6 +47,7 @@ export function createApp() {
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/orders', ordersRoutes);
   app.use('/api/customers', customersRoutes);
+  app.use('/api/devices', devicesRoutes);
   app.use('/api/analytics', analyticsRoutes);
 
   // Centralized 404 for unmatched API routes

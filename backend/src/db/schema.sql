@@ -110,3 +110,12 @@ SELECT * FROM (
     ('Building Blocks Set', '250-piece creative building blocks.', 29.99, 'Toys', 90, 'https://placehold.co/400x400?text=Blocks')
 ) AS seed(name, description, price, category, stock, image_url)
 WHERE NOT EXISTS (SELECT 1 FROM products);
+
+-- Expo push tokens for the ShelfStock Companion admin app. One row per
+-- device; ON CONFLICT upsert keeps re-registration idempotent.
+CREATE TABLE IF NOT EXISTS device_tokens (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      VARCHAR(200) NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
