@@ -158,3 +158,44 @@ describe('product write endpoints (admin-gated validation)', () => {
     expect(poolQuery).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /api/products/barcode/:code', () => {
+  it('returns the product for a known barcode', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ id: 7, name: 'Mug', barcode: '4800001234567' }] });
+
+    const res = await request(app)
+      .get('/api/products/barcode/4800001234567')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(7);
+    expect(poolQuery.mock.calls[0][0]).toContain('barcode = $1');
+    expect(poolQuery.mock.calls[0][1]).toEqual(['4800001234567']);
+  });
+
+  it('404s for an unknown barcode', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .get('/api/products/barcode/0000000000000')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects non-admin users', async () => {
+    const res = await request(app)
+      .get('/api/products/barcode/4800001234567')
+      .set('Authorization', `Bearer ${tokenFor(2, 'customer')}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('400s on an overlong code', async () => {
+    const res = await request(app)
+      .get(`/api/products/barcode/${'9'.repeat(65)}`)
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(400);
+  });
+});

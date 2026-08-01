@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS products (
   category    VARCHAR(100) NOT NULL,
   stock       INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
   image_url   TEXT,
+  barcode     VARCHAR(64) UNIQUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

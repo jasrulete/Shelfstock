@@ -125,6 +125,27 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/products/barcode/:code - admin lookup used by the companion
+ * app's scanner. Registered before /:id so the literal path wins.
+ */
+router.get('/barcode/:code', requireAuth, adminOnly, async (req, res) => {
+  const code = req.params.code.trim();
+  if (!code || code.length > 64) {
+    return res.status(400).json({ error: 'Invalid barcode' });
+  }
+  try {
+    const result = await pool.query('SELECT * FROM products WHERE barcode = $1', [code]);
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'No product with this barcode' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Barcode lookup error:', err);
+    res.status(500).json({ error: 'Failed to look up barcode' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (id === null) {
