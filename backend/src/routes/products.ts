@@ -2,8 +2,34 @@ import { Router } from 'express';
 import { pool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
+import reviewsRouter from './reviews';
 
 const router = Router();
+
+// Nested resource: /api/products/:productId/reviews. A two-segment path can
+// never collide with the one-segment '/:id' below, but it is mounted first so
+// the nesting is obvious when reading the file top to bottom.
+router.use('/:productId/reviews', reviewsRouter);
+
+/**
+ * Rating aggregate joined onto product reads.
+ *
+ * Grouped once in a subquery rather than a correlated subquery per row, and
+ * left-joined so a product with no reviews still comes back (as 0/0) instead
+ * of disappearing from the listing.
+ */
+const RATING_JOIN = `
+  LEFT JOIN (
+    SELECT product_id, AVG(rating) AS average, COUNT(*) AS total
+    FROM reviews
+    GROUP BY product_id
+  ) r ON r.product_id = p.id
+`;
+
+const RATING_COLUMNS = `
+  COALESCE(r.average, 0)::float AS rating_average,
+  COALESCE(r.total, 0)::int AS rating_count
+`;
 
 const SORTABLE_COLUMNS = new Set(['price', 'name', 'created_at']);
 
@@ -41,7 +67,39 @@ function validateProductFields(body: any, requireAll: boolean): string | null {
   if (image_url !== undefined && image_url !== null && typeof image_url !== 'string') {
     return 'image_url must be a string';
   }
+  if (body?.images !== undefined) {
+    if (!Array.isArray(body.images) || body.images.some((u: unknown) => typeof u !== 'string')) {
+      return 'images must be an array of strings';
+    }
+    if (body.images.length > 8) {
+      return 'a product can have at most 8 gallery images';
+    }
+  }
   return null;
+}
+
+/**
+ * Replaces a product's gallery with `images`, in the given order.
+ *
+ * Delete-then-insert rather than diffing: the list is at most eight rows and
+ * ordering is part of the payload, so reconciling in place would be more code
+ * for no benefit. Runs on a caller-supplied client so it joins the caller's
+ * transaction - a product whose gallery half-updated would be worse than one
+ * that didn't update at all.
+ */
+async function replaceGallery(
+  client: { query: (sql: string, values?: unknown[]) => Promise<unknown> },
+  productId: number,
+  images: string[]
+): Promise<void> {
+  await client.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
+  const urls = images.map((u) => u.trim()).filter(Boolean);
+  for (let i = 0; i < urls.length; i++) {
+    await client.query(
+      'INSERT INTO product_images (product_id, url, position) VALUES ($1, $2, $3)',
+      [productId, urls[i], i]
+    );
+  }
 }
 
 /**
@@ -102,8 +160,11 @@ router.get('/', async (req, res) => {
 
     values.push(limitNum, offset);
     const dataResult = await pool.query(
-      `SELECT id, name, description, price, category, stock, image_url, created_at
-       FROM products
+      `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
+              p.created_at,
+              ${RATING_COLUMNS}
+       FROM products p
+       ${RATING_JOIN}
        ${whereClause}
        ORDER BY ${sortColumn} ${sortOrder}
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
@@ -125,6 +186,75 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/products/low-stock
+ *
+ * Public, unlike the admin dashboard's /api/analytics/low-stock. The storefront
+ * uses this to merchandise scarcity, so it deliberately excludes sold-out items
+ * - there is nothing to sell in a "0 left" row. It exposes nothing a shopper
+ * can't already read off a product card.
+ *
+ * MUST stay above the '/:id' route below: Express matches in declaration order,
+ * and '/:id' would otherwise swallow '/low-stock' and 404 on parseId().
+ */
+router.get('/low-stock', async (req, res) => {
+  const threshold = Math.min(
+    20,
+    Math.max(1, parseInt((req.query.threshold as string) ?? '5', 10) || 5)
+  );
+  const limit = Math.min(12, Math.max(1, parseInt((req.query.limit as string) ?? '4', 10) || 4));
+
+  try {
+    const result = await pool.query(
+      `SELECT id, name, price, stock, image_url
+       FROM products
+       WHERE stock > 0 AND stock <= $1
+       ORDER BY stock ASC, name ASC
+       LIMIT $2`,
+      [threshold, limit]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Low stock products error:', err);
+    res.status(500).json({ error: 'Failed to fetch low stock products' });
+  }
+});
+
+/**
+ * GET /api/products/:id/related
+ *
+ * Same category, excluding the product itself and anything sold out - a
+ * "you might also like" row that leads to an out-of-stock page is a dead end.
+ * Two-segment path, so it can't collide with '/:id'.
+ */
+router.get('/:id/related', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+  const limit = Math.min(8, Math.max(1, parseInt((req.query.limit as string) ?? '4', 10) || 4));
+
+  try {
+    const result = await pool.query(
+      `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
+              p.created_at,
+              ${RATING_COLUMNS}
+       FROM products p
+       ${RATING_JOIN}
+       WHERE p.category = (SELECT category FROM products WHERE id = $1)
+         AND p.id <> $1
+         AND p.stock > 0
+       ORDER BY r.average DESC NULLS LAST, p.created_at DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Related products error:', err);
+    res.status(500).json({ error: 'Failed to fetch related products' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (id === null) {
@@ -132,11 +262,32 @@ router.get('/:id', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    const result = await pool.query(
+      `SELECT p.*, ${RATING_COLUMNS}
+       FROM products p
+       ${RATING_JOIN}
+       WHERE p.id = $1`,
+      [id]
+    );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    res.json(result.rows[0]);
+    const product = result.rows[0];
+
+    // The cover image leads the gallery, then the extra angles in order. Sent
+    // as one ready-to-render array so the client isn't left stitching
+    // image_url onto a separate list and getting the order wrong.
+    const gallery = await pool.query(
+      `SELECT url FROM product_images
+       WHERE product_id = $1
+       ORDER BY position ASC, id ASC`,
+      [id]
+    );
+    const images = [product.image_url, ...gallery.rows.map((r) => r.url as string)].filter(
+      (url): url is string => Boolean(url)
+    );
+
+    res.json({ ...product, images });
   } catch (err) {
     console.error('Get product error:', err);
     res.status(500).json({ error: 'Failed to fetch product' });
@@ -149,19 +300,28 @@ router.post('/', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url } = req.body;
+  const { name, description, price, category, stock, image_url, images } = req.body;
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const result = await client.query(
       `INSERT INTO products (name, description, price, category, stock, image_url)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [name.trim(), description ?? null, price, category.trim(), stock ?? 0, image_url || null]
     );
+    if (Array.isArray(images)) {
+      await replaceGallery(client, result.rows[0].id, images);
+    }
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Create product error:', err);
     res.status(500).json({ error: 'Failed to create product' });
+  } finally {
+    client.release();
   }
 });
 
@@ -176,10 +336,12 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url } = req.body ?? {};
+  const { name, description, price, category, stock, image_url, images } = req.body ?? {};
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const result = await client.query(
       `UPDATE products
        SET name = COALESCE($1, name),
            description = COALESCE($2, description),
@@ -192,12 +354,22 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
       [name, description, price, category, stock, image_url, id]
     );
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Product not found' });
     }
+    // Omitting `images` leaves the gallery alone; sending [] clears it. Same
+    // contract as the COALESCE fields above - absent means "don't touch".
+    if (Array.isArray(images)) {
+      await replaceGallery(client, id, images);
+    }
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Update product error:', err);
     res.status(500).json({ error: 'Failed to update product' });
+  } finally {
+    client.release();
   }
 });
 

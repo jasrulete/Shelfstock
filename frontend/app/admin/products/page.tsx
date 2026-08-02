@@ -17,6 +17,8 @@ interface ProductForm {
   category: string;
   stock: string;
   image_url: string;
+  /** Extra gallery images, one URL per line. */
+  images: string;
 }
 
 const emptyForm: ProductForm = {
@@ -26,6 +28,7 @@ const emptyForm: ProductForm = {
   category: '',
   stock: '0',
   image_url: '',
+  images: '',
 };
 
 export default function AdminProductsPage() {
@@ -72,8 +75,29 @@ export default function AdminProductsPage() {
       category: product.category,
       stock: String(product.stock),
       image_url: product.image_url ?? '',
+      // The listing payload has no gallery; it is loaded per product on edit.
+      images: '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Only the detail endpoint returns the gallery. Fetched after the form is
+    // populated so editing stays instant, and dropped if the admin has already
+    // moved on to a different product by the time it lands - otherwise a slow
+    // response could overwrite whatever they are editing now.
+    api
+      .get<Product>(`/api/products/${product.id}`)
+      .then((full) => {
+        const extras = (full.images ?? []).filter((url) => url !== full.image_url);
+        setEditingId((current) => {
+          if (current === product.id) {
+            setForm((prev) => ({ ...prev, images: extras.join('\n') }));
+          }
+          return current;
+        });
+      })
+      .catch(() => {
+        /* leave the gallery field blank rather than blocking the edit */
+      });
   }
 
   function cancelEdit() {
@@ -93,6 +117,12 @@ export default function AdminProductsPage() {
       category: form.category.trim(),
       stock: Number(form.stock),
       image_url: form.image_url.trim() || null,
+      // One URL per line. Sent as [] when blank, which clears the gallery;
+      // omitting the key entirely would instead leave it untouched.
+      images: form.images
+        .split(/\r?\n/)
+        .map((u) => u.trim())
+        .filter(Boolean),
     };
 
     try {
@@ -166,11 +196,22 @@ export default function AdminProductsPage() {
             />
             <div className="sm:col-span-2">
               <Input
-                label="Image URL"
+                label="Cover image URL"
                 type="url"
                 placeholder="https://..."
+                hint="Shown on cards, in the cart and as the first gallery image."
                 value={form.image_url}
                 onChange={(e) => patchForm({ image_url: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Textarea
+                label="More images"
+                rows={2}
+                placeholder={'https://...\nhttps://...'}
+                hint="One URL per line, up to 8. These appear as extra angles on the product page. Hosts must be allowlisted in next.config.js."
+                value={form.images}
+                onChange={(e) => patchForm({ images: e.target.value })}
               />
             </div>
             <div className="sm:col-span-2">

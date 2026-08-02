@@ -48,12 +48,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
       - name: Build
         run: npm run build
         env:
           # Dummy values so the static build succeeds; real values are set
           # at deploy time.
           NEXT_PUBLIC_API_URL: http://localhost:4000
+
+      # Fails the build on a known-vulnerable dependency. Scoped to high and
+      # above so a low-severity advisory in a dev tool can't block a deploy,
+      # and to production deps because that is what actually ships.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
 
   e2e:
     name: E2E (Dockerized stack)

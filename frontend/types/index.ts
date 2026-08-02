@@ -7,6 +7,33 @@ export interface Product {
   stock: number;
   image_url: string | null;
   created_at: string;
+  /**
+   * Joined aggregate, not a column. Optional because cart items are persisted
+   * to localStorage and an older stored cart won't carry these fields.
+   */
+  rating_average?: number;
+  rating_count?: number;
+  /**
+   * Cover image first, then any extra angles. Only the detail endpoint returns
+   * this - listings deliberately stay on the single image_url.
+   */
+  images?: string[];
+}
+
+export interface Review {
+  id: number;
+  rating: number;
+  body: string | null;
+  verified_purchase: boolean;
+  created_at: string;
+  /** Derived, non-identifying - the API never returns reviewer emails. */
+  reviewer: string;
+}
+
+export interface ReviewsResponse {
+  reviews: Review[];
+  summary: { average: number; total: number };
+  pagination: Pagination;
 }
 
 export interface Pagination {

@@ -1,0 +1,8 @@
+{
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "@next/next/no-img-element": "error",
+    "jsx-a11y/alt-text": "error"
+  },
+  "ignorePatterns": [".next", "node_modules", "next-env.d.ts"]
+}

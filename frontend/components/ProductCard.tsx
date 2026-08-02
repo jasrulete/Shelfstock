@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -9,6 +8,8 @@ import AddToCartModal from './AddToCartModal';
 import Button from './ui/Button';
 import Card from './ui/Card';
 import Badge from './ui/Badge';
+import ProductImage from './ui/ProductImage';
+import StarRating from './ui/StarRating';
 
 // Stock is the most characteristic thing ShelfStock knows about a product, so
 // it belongs on the card rather than only on the detail page. Anything above
@@ -34,7 +35,15 @@ function StockBadge({ stock }: { stock: number }) {
   return null;
 }
 
-export default function ProductCard({ product }: { product: Product }) {
+export default function ProductCard({
+  product,
+  // Set on the first row of the grid: those images are the largest thing above
+  // the fold, and lazy-loading them delays LCP by a round trip.
+  priority = false,
+}: {
+  product: Product;
+  priority?: boolean;
+}) {
   const { currency, convert } = useCurrency();
   const [showModal, setShowModal] = useState(false);
   const priceUsd = Number(product.price);
@@ -53,17 +62,15 @@ export default function ProductCard({ product }: { product: Product }) {
       */}
       <Card className="group relative flex gap-3 p-3 transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover sm:flex-col sm:gap-0">
         <div className="relative aspect-square w-24 shrink-0 overflow-hidden rounded bg-gray-100 sm:mb-3 sm:w-full">
-          {product.image_url && (
-            <Image
-              src={product.image_url}
-              alt={product.name}
-              fill
-              className={`object-cover transition-transform duration-300 group-hover:scale-105 ${
-                outOfStock ? 'opacity-50 grayscale' : ''
-              }`}
-              sizes="(max-width: 639px) 96px, (max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
-            />
-          )}
+          <ProductImage
+            src={product.image_url}
+            alt={product.name}
+            priority={priority}
+            className={`transition-transform duration-300 group-hover:scale-105 ${
+              outOfStock ? 'opacity-50 grayscale' : ''
+            }`}
+            sizes="(max-width: 639px) 96px, (max-width: 767px) 50vw, (max-width: 1023px) 33vw, 25vw"
+          />
           <StockBadge stock={product.stock} />
         </div>
 
@@ -82,10 +89,39 @@ export default function ProductCard({ product }: { product: Product }) {
               {product.name}
             </Link>
           </h3>
+          {/*
+            Only rendered once a product actually has reviews. An empty row of
+            grey stars on every card reads as "nobody bought this" and costs
+            more trust than the space it fills.
+          */}
+          {(product.rating_count ?? 0) > 0 && (
+            <StarRating
+              average={product.rating_average ?? 0}
+              count={product.rating_count}
+              className="mb-1"
+            />
+          )}
+
           <p className="mb-2 line-clamp-2 text-sm text-gray-500">{product.description}</p>
 
-          <div className="mt-auto flex items-center justify-between gap-2">
-            <span className="font-semibold">{formatMoney(convert(priceUsd), currency)}</span>
+          <div className="mt-auto flex items-end justify-between gap-2">
+            <div className="flex min-w-0 flex-col">
+              <span className="font-semibold tabular-nums">
+                {formatMoney(convert(priceUsd), currency)}
+              </span>
+              {/*
+                The USD original sits under the converted price whenever the
+                shopper isn't already in USD. Orders are stored in USD, so this
+                is the number they will actually be charged - showing only the
+                approximate conversion asks them to trust a figure the receipt
+                won't match.
+              */}
+              {currency !== 'USD' && (
+                <span className="font-mono text-[0.65rem] leading-tight text-gray-500 tabular-nums">
+                  {formatMoney(priceUsd, 'USD')} USD
+                </span>
+              )}
+            </div>
             {/* z-10 keeps the button clickable above the stretched link. */}
             <Button
               size="sm"

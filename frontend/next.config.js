@@ -4,9 +4,23 @@ const nextConfig = {
   // `node server.js` without node_modules. Harmless outside Docker.
   output: 'standalone',
   images: {
-    // Admins can paste any https image URL when creating a product, so we
-    // can't enumerate hostnames ahead of time.
-    remotePatterns: [{ protocol: 'https', hostname: '**' }],
+    /**
+     * Allowlisted rather than `hostname: '**'`.
+     *
+     * The wildcard let anyone call /_next/image?url=<any https url> and have
+     * this deployment fetch, optimize and serve it - an open image proxy on
+     * your bandwidth.
+     *
+     * The trade-off: an admin pasting an image URL from a host not listed here
+     * gets the neutral placeholder from components/ui/ProductImage instead of
+     * the photo (it degrades, it doesn't break). Add the host below when that
+     * happens, or restore `{ protocol: 'https', hostname: '**' }` to go back to
+     * accepting anything.
+     */
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'placehold.co' },
+    ],
   },
 };
 

@@ -70,6 +70,51 @@ CREATE TABLE IF NOT EXISTS order_items (
   price_at_purchase NUMERIC(10, 2) NOT NULL CHECK (price_at_purchase >= 0)
 );
 
+-- Additional product photography.
+--
+-- products.image_url stays the cover shot: it's what listings, the cart and
+-- search results use, and every one of those wants exactly one image. This
+-- table holds the *extra* angles the detail page shows, so adding a gallery
+-- never risks changing which image a product card picks.
+--
+-- position orders the strip; ties fall back to id so the order is stable.
+CREATE TABLE IF NOT EXISTS product_images (
+  id         SERIAL PRIMARY KEY,
+  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  url        TEXT NOT NULL,
+  position   SMALLINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_product_id
+  ON product_images(product_id, position);
+
+-- Product reviews.
+--
+-- UNIQUE (product_id, user_id) is the anti-spam rule: one review per person
+-- per product, enforced by the database rather than by a check the API could
+-- forget. Editing a review is an UPDATE, not a second row.
+--
+-- verified_purchase follows the Amazon model: anyone signed in may review, and
+-- whether they actually bought the item is recorded and displayed rather than
+-- used to block them. It is computed once at write time from the order history
+-- because it describes the moment the review was written - recomputing it later
+-- would let a cancelled order silently un-verify an honest review.
+CREATE TABLE IF NOT EXISTS reviews (
+  id                SERIAL PRIMARY KEY,
+  product_id        INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating            SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body              TEXT,
+  verified_purchase BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (product_id, user_id)
+);
+
+-- Every product card and listing asks "what is this product's average?", so the
+-- aggregate is grouped by product_id on read.
+CREATE INDEX IF NOT EXISTS idx_reviews_product_id ON reviews(product_id);
+
 -- One row per win-back email sent. The win-back job only emails a customer
 -- if no row exists newer than their last order, so each lapse gets at most
 -- one email no matter how often the job runs.
@@ -101,11 +146,50 @@ ON CONFLICT (name) DO NOTHING;
 INSERT INTO products (name, description, price, category, stock, image_url)
 SELECT * FROM (
   VALUES
-    ('Wireless Mouse', 'Ergonomic 2.4GHz wireless mouse with USB receiver.', 19.99, 'Electronics', 150, 'https://placehold.co/400x400?text=Mouse'),
-    ('Mechanical Keyboard', 'Hot-swappable mechanical keyboard, brown switches.', 79.99, 'Electronics', 60, 'https://placehold.co/400x400?text=Keyboard'),
-    ('Stainless Steel Water Bottle', 'Insulated 750ml bottle, keeps drinks cold 24h.', 24.50, 'Home & Kitchen', 200, 'https://placehold.co/400x400?text=Bottle'),
-    ('The Pragmatic Programmer', 'Classic software engineering book.', 34.00, 'Books', 80, 'https://placehold.co/400x400?text=Book'),
-    ('Cotton T-Shirt', 'Plain crew-neck cotton t-shirt.', 12.99, 'Apparel', 300, 'https://placehold.co/400x400?text=Shirt'),
-    ('Building Blocks Set', '250-piece creative building blocks.', 29.99, 'Toys', 90, 'https://placehold.co/400x400?text=Blocks')
+    ('Wireless Mouse', 'Ergonomic 2.4GHz wireless mouse with USB receiver.', 19.99, 'Electronics', 150, 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Mechanical Keyboard', 'Hot-swappable mechanical keyboard, brown switches.', 79.99, 'Electronics', 60, 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Stainless Steel Water Bottle', 'Insulated 750ml bottle, keeps drinks cold 24h.', 24.50, 'Home & Kitchen', 200, 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('The Pragmatic Programmer', 'Classic software engineering book.', 34.00, 'Books', 80, 'https://images.unsplash.com/photo-1580121441575-41bcb5c6b47c?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Cotton T-Shirt', 'Plain crew-neck cotton t-shirt.', 12.99, 'Apparel', 300, 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Building Blocks Set', '250-piece creative building blocks.', 29.99, 'Toys', 90, 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=800&h=800&q=80')
 ) AS seed(name, description, price, category, stock, image_url)
 WHERE NOT EXISTS (SELECT 1 FROM products);
+
+-- Databases seeded before this change still hold placehold.co grey boxes, and
+-- the INSERT above is skipped once products exist. This backfills real
+-- photography for those rows only: the LIKE guard means it never touches an
+-- image an admin has since set by hand, and re-running it is a no-op.
+UPDATE products SET image_url = seed.url
+FROM (
+  VALUES
+    ('Wireless Mouse', 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Mechanical Keyboard', 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Stainless Steel Water Bottle', 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('The Pragmatic Programmer', 'https://images.unsplash.com/photo-1580121441575-41bcb5c6b47c?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Cotton T-Shirt', 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&h=800&q=80'),
+    ('Building Blocks Set', 'https://images.unsplash.com/photo-1587654780291-39c9404d746b?auto=format&fit=crop&w=800&h=800&q=80')
+) AS seed(name, url)
+WHERE products.name = seed.name
+  AND products.image_url LIKE '%placehold.co%';
+
+-- Gallery seed.
+--
+-- Only the building blocks get a second shot, and that is deliberate. These
+-- are stock photographs, so a "second angle" of the keyboard or the bottle is
+-- in fact a different keyboard and a different bottle - which on a store whose
+-- whole claim is that the listing matches the shelf would be the worst
+-- possible thing to fake. Loose coloured bricks are generic enough that two
+-- photographs honestly depict the same product.
+--
+-- Everything else carries one image until real photography exists; the gallery
+-- renders a single image without a thumbnail strip.
+INSERT INTO product_images (product_id, url, position)
+SELECT p.id, seed.url, seed.position
+FROM (
+  VALUES
+    ('Building Blocks Set', 'https://images.unsplash.com/photo-1633469924738-52101af51d87?auto=format&fit=crop&w=800&h=800&q=80', 1)
+) AS seed(name, url, position)
+JOIN products p ON p.name = seed.name
+WHERE NOT EXISTS (
+  SELECT 1 FROM product_images pi WHERE pi.product_id = p.id AND pi.url = seed.url
+);

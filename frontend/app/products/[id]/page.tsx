@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Image from 'next/image';
+import StarRating from '@/components/ui/StarRating';
+import Breadcrumb from '@/components/ui/Breadcrumb';
+import ProductGallery from '@/components/ProductGallery';
+import ProductReviews from '@/components/ProductReviews';
+import ProductFaq from '@/components/ProductFaq';
+import RelatedProducts from '@/components/RelatedProducts';
 import { useParams } from 'next/navigation';
 import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
@@ -25,22 +30,51 @@ export default function ProductDetailPage() {
       .catch((err: ApiError) => setError(err.message));
   }, [params.id]);
 
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (error)
+    return (
+      <p role="alert" className="font-medium text-red-700">
+        {error}
+      </p>
+    );
   if (!product) return <p className="text-gray-500">Loading...</p>;
 
   return (
-    <div className="grid gap-8 md:grid-cols-2">
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-gray-100">
-        {product.image_url && (
-          <Image src={product.image_url} alt={product.name} fill className="object-cover" />
-        )}
-      </div>
+    <div>
+      <Breadcrumb
+        items={[
+          { label: 'Shop', href: '/' },
+          // Category filtering is client state on the home page rather than a
+          // route, so this crumb names the category without pretending there
+          // is a /category/<name> page to land on.
+          { label: product.category },
+          { label: product.name },
+        ]}
+      />
+
+      <div className="mt-4 grid gap-8 md:grid-cols-2">
+        <ProductGallery images={product.images ?? []} productName={product.name} />
       <div>
         <h1 className="text-2xl font-bold">{product.name}</h1>
         <p className="mt-1 text-sm text-gray-500">{product.category}</p>
-        <p className="mt-4 text-2xl font-semibold">
+
+        {(product.rating_count ?? 0) > 0 && (
+          <a href="#reviews" className="mt-2 inline-flex hover:underline">
+            <StarRating
+              average={product.rating_average ?? 0}
+              count={product.rating_count}
+              size="md"
+            />
+          </a>
+        )}
+
+        <p className="mt-4 text-2xl font-semibold tabular-nums">
           {formatMoney(convert(Number(product.price)), currency)}
         </p>
+        {currency !== 'USD' && (
+          <p className="font-mono text-xs text-gray-500 tabular-nums">
+            {formatMoney(Number(product.price), 'USD')} USD
+          </p>
+        )}
         <p className="mt-4 text-gray-700">{product.description}</p>
         {/* Colours here are one step darker than the obvious amber-600/red-600
             so each clears 4.5:1 against white. */}
@@ -76,7 +110,32 @@ export default function ProductDetailPage() {
             Add to cart
           </Button>
         </div>
+
+        {/* Store-wide buying facts, next to the buy button where the doubt is. */}
+        <ul className="mt-6 space-y-1.5 border-t border-gray-200 pt-4 text-sm text-gray-600">
+          <li className="flex gap-2">
+            <span aria-hidden="true" className="text-brand-600">
+              ✓
+            </span>
+            Pay cash when it arrives — no card needed
+          </li>
+          <li className="flex gap-2">
+            <span aria-hidden="true" className="text-brand-600">
+              ✓
+            </span>
+            This price is locked to your order once you place it
+          </li>
+        </ul>
       </div>
+      </div>
+
+      <div id="reviews">
+        <ProductReviews productId={String(params.id)} />
+      </div>
+
+      <ProductFaq />
+
+      <RelatedProducts productId={String(params.id)} category={product.category} />
     </div>
   );
 }
