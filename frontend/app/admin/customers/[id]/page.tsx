@@ -8,6 +8,17 @@ import { api, ApiError } from '@/lib/api';
 import { CustomerDetail } from '@/types';
 import SegmentBadge from '@/components/SegmentBadge';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
+import Card from '@/components/ui/Card';
+
+/** Mirrors the dashboard's KPI tile so both admin screens read the same. */
+function Kpi({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Card className="p-4">
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="mt-0.5 font-display text-2xl font-semibold tabular-nums">{value}</p>
+    </Card>
+  );
+}
 
 export default function AdminCustomerDetailPage() {
   const router = useRouter();
@@ -31,7 +42,12 @@ export default function AdminCustomerDetailPage() {
       .catch((err: ApiError) => setError(err.message));
   }, [router, params.id]);
 
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (error)
+    return (
+      <p role="alert" className="font-medium text-red-700">
+        {error}
+      </p>
+    );
   if (!customer) return <p className="text-gray-500">Loading customer...</p>;
 
   const avgOrderValue =
@@ -50,7 +66,7 @@ export default function AdminCustomerDetailPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded border border-gray-200 bg-white p-4 md:col-span-1">
+        <Card className="p-4 md:col-span-1">
           <h2 className="mb-3 font-semibold">Contact</h2>
           <dl className="space-y-2 text-sm">
             <div>
@@ -70,30 +86,21 @@ export default function AdminCustomerDetailPage() {
               <dd>{new Date(customer.created_at).toLocaleDateString()}</dd>
             </div>
           </dl>
-        </div>
+        </Card>
 
         <div className="md:col-span-2">
           <div className="grid grid-cols-2 gap-4">
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">Lifetime Value</p>
-              <p className="text-2xl font-bold">${customer.total_spent.toFixed(2)}</p>
-            </div>
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">Orders</p>
-              <p className="text-2xl font-bold">{customer.orders_count}</p>
-            </div>
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">Avg. Order Value</p>
-              <p className="text-2xl font-bold">${avgOrderValue.toFixed(2)}</p>
-            </div>
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">Last Order</p>
-              <p className="text-2xl font-bold">
-                {customer.last_order_at
+            <Kpi label="Lifetime Value" value={`$${customer.total_spent.toFixed(2)}`} />
+            <Kpi label="Orders" value={customer.orders_count} />
+            <Kpi label="Avg. Order Value" value={`$${avgOrderValue.toFixed(2)}`} />
+            <Kpi
+              label="Last Order"
+              value={
+                customer.last_order_at
                   ? new Date(customer.last_order_at).toLocaleDateString()
-                  : '—'}
-              </p>
-            </div>
+                  : '—'
+              }
+            />
           </div>
         </div>
       </div>
@@ -107,7 +114,7 @@ export default function AdminCustomerDetailPage() {
             {customer.orders.map((order) => (
               <li key={order.id} className="relative">
                 <span className="absolute -left-[31px] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-500" />
-                <div className="rounded border border-gray-200 bg-white p-3 text-sm">
+                <Card className="p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/orders/${order.id}`} className="text-brand-600 underline">
                       Order #{order.id}
@@ -119,7 +126,7 @@ export default function AdminCustomerDetailPage() {
                     {new Date(order.created_at).toLocaleString()} &middot; {order.item_count}{' '}
                     {order.item_count === 1 ? 'item' : 'items'}
                   </p>
-                </div>
+                </Card>
               </li>
             ))}
           </ol>

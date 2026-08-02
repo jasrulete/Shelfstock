@@ -8,6 +8,8 @@ import { api, ApiError } from '@/lib/api';
 import { AdminOrder, AdminOrdersResponse, OrderStatus } from '@/types';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import Pagination from '@/components/Pagination';
+import Card from '@/components/ui/Card';
+import FilterPill from '@/components/ui/FilterPill';
 
 const STATUS_FILTERS: Array<{ label: string; value: string }> = [
   { label: 'All', value: '' },
@@ -76,7 +78,12 @@ export default function AdminOrdersPage() {
     }
   }
 
-  if (error && !data) return <p className="text-red-500">{error}</p>;
+  if (error && !data)
+    return (
+      <p role="alert" className="font-medium text-red-700">
+        {error}
+      </p>
+    );
 
   return (
     <div className="space-y-4">
@@ -84,24 +91,24 @@ export default function AdminOrdersPage() {
 
       <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map((f) => (
-          <button
+          <FilterPill
             key={f.value}
+            active={statusFilter === f.value}
             onClick={() => {
               setStatusFilter(f.value);
               setPage(1);
             }}
-            className={`rounded-full border px-3 py-1 text-sm ${
-              statusFilter === f.value
-                ? 'border-brand-500 bg-brand-50 text-brand-700'
-                : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
-            }`}
           >
             {f.label}
-          </button>
+          </FilterPill>
         ))}
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-red-700">
+          {error}
+        </p>
+      )}
 
       {!data ? (
         <p className="text-gray-500">Loading orders...</p>
@@ -109,22 +116,23 @@ export default function AdminOrdersPage() {
         <p className="text-gray-500">No orders found.</p>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full rounded border border-gray-200 bg-white text-sm">
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-gray-50 text-left">
-                  <th className="p-2">Order</th>
-                  <th className="p-2">Date</th>
-                  <th className="p-2">Customer</th>
-                  <th className="p-2">Ship to</th>
-                  <th className="p-2">Total</th>
-                  <th className="p-2">Status</th>
-                  <th className="p-2">Update</th>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <th className="p-2 font-medium text-gray-600">Order</th>
+                  <th className="p-2 font-medium text-gray-600">Date</th>
+                  <th className="p-2 font-medium text-gray-600">Customer</th>
+                  <th className="p-2 font-medium text-gray-600">Ship to</th>
+                  <th className="p-2 font-medium text-gray-600">Total</th>
+                  <th className="p-2 font-medium text-gray-600">Status</th>
+                  <th className="p-2 font-medium text-gray-600">Update</th>
                 </tr>
               </thead>
               <tbody>
                 {data.orders.map((order) => (
-                  <tr key={order.id} className="border-b align-top last:border-0">
+                  <tr key={order.id} className="border-b border-gray-200 align-top last:border-0">
                     <td className="p-2">
                       <Link href={`/orders/${order.id}`} className="text-brand-600 underline">
                         #{order.id}
@@ -151,7 +159,10 @@ export default function AdminOrdersPage() {
                           onChange={(e) => {
                             if (e.target.value) changeStatus(order, e.target.value as OrderStatus);
                           }}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs"
+                          // Every row has one of these, so the label has to name
+                          // the order it belongs to.
+                          aria-label={`Change status of order #${order.id}`}
+                          className="cursor-pointer rounded border border-gray-300 bg-white px-2 py-1 text-xs"
                         >
                           <option value="">Move to...</option>
                           {NEXT_STATUSES[order.status].map((s) => (
@@ -166,7 +177,8 @@ export default function AdminOrdersPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </Card>
           <Pagination pagination={data.pagination} onPageChange={setPage} />
         </>
       )}

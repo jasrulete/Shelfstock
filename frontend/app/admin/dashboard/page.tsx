@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import SalesChart from '@/components/SalesChart';
+import Card from '@/components/ui/Card';
 
 interface Summary {
   total_revenue: number;
@@ -42,6 +43,16 @@ interface StaleOrder {
   total_amount: string;
   created_at: string;
   user_email: string;
+}
+
+/** One dashboard statistic. Five of these were previously copy-pasted inline. */
+function Kpi({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Card className="p-4">
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="mt-0.5 font-display text-2xl font-semibold tabular-nums">{value}</p>
+    </Card>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -87,7 +98,12 @@ export default function AdminDashboardPage() {
       .catch((err: ApiError) => setError(err.message));
   }, [router]);
 
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (error)
+    return (
+      <p role="alert" className="font-medium text-red-700">
+        {error}
+      </p>
+    );
   if (!summary) return <p className="text-gray-500">Loading dashboard...</p>;
 
   return (
@@ -95,34 +111,19 @@ export default function AdminDashboardPage() {
       <h1 className="text-2xl font-bold">Sales Dashboard</h1>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        <div className="rounded border border-gray-200 bg-white p-4">
-          <p className="text-sm text-gray-500">Total Revenue</p>
-          <p className="text-2xl font-bold">${summary.total_revenue.toFixed(2)}</p>
-        </div>
-        <div className="rounded border border-gray-200 bg-white p-4">
-          <p className="text-sm text-gray-500">Total Orders</p>
-          <p className="text-2xl font-bold">{summary.total_orders}</p>
-        </div>
+        <Kpi label="Total Revenue" value={`$${summary.total_revenue.toFixed(2)}`} />
+        <Kpi label="Total Orders" value={summary.total_orders} />
         {customers && (
           <>
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">Customers</p>
-              <p className="text-2xl font-bold">{customers.total_customers}</p>
-            </div>
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">New (30d)</p>
-              <p className="text-2xl font-bold">{customers.new_customers}</p>
-            </div>
-            <div className="rounded border border-gray-200 bg-white p-4">
-              <p className="text-sm text-gray-500">Repeat Rate</p>
-              <p className="text-2xl font-bold">{(customers.repeat_rate * 100).toFixed(0)}%</p>
-            </div>
+            <Kpi label="Customers" value={customers.total_customers} />
+            <Kpi label="New (30d)" value={customers.new_customers} />
+            <Kpi label="Repeat Rate" value={`${(customers.repeat_rate * 100).toFixed(0)}%`} />
           </>
         )}
       </div>
 
       {staleOrders.length > 0 && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-4">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
           <h2 className="mb-2 font-semibold text-amber-800">
             ⚠ {staleOrders.length} {staleOrders.length === 1 ? 'order' : 'orders'} pending for 7+
             days
@@ -145,7 +146,7 @@ export default function AdminDashboardPage() {
       )}
 
       {lowStock.length > 0 && (
-        <div className="rounded border border-red-300 bg-red-50 p-4">
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4">
           <h2 className="mb-2 font-semibold text-red-800">
             Low stock ({lowStock.length} {lowStock.length === 1 ? 'product' : 'products'} at 5 or
             fewer units)
@@ -170,24 +171,26 @@ export default function AdminDashboardPage() {
 
       <div>
         <h2 className="mb-2 font-semibold">Top Products</h2>
-        <table className="w-full rounded border border-gray-200 bg-white text-sm">
-          <thead>
-            <tr className="border-b bg-gray-50 text-left">
-              <th className="p-2">Product</th>
-              <th className="p-2">Units Sold</th>
-              <th className="p-2">Revenue</th>
-            </tr>
-          </thead>
-          <tbody>
-            {topProducts.map((p) => (
-              <tr key={p.id} className="border-b last:border-0">
-                <td className="p-2">{p.name}</td>
-                <td className="p-2">{p.units_sold}</td>
-                <td className="p-2">${p.revenue.toFixed(2)}</td>
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                <th className="p-2 font-medium text-gray-600">Product</th>
+                <th className="p-2 font-medium text-gray-600">Units Sold</th>
+                <th className="p-2 font-medium text-gray-600">Revenue</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {topProducts.map((p) => (
+                <tr key={p.id} className="border-b border-gray-200 last:border-0">
+                  <td className="p-2">{p.name}</td>
+                  <td className="p-2 tabular-nums">{p.units_sold}</td>
+                  <td className="p-2 tabular-nums">${p.revenue.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       </div>
     </div>
   );

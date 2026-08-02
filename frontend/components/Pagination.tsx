@@ -1,6 +1,7 @@
 'use client';
 
 import { Pagination as PaginationType } from '@/types';
+import Button from './ui/Button';
 
 export default function Pagination({
   pagination,
@@ -13,24 +14,22 @@ export default function Pagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="mt-4 flex items-center justify-center gap-2">
-      <button
-        onClick={() => onPageChange(page - 1)}
-        disabled={page <= 1}
-        className="rounded border border-gray-300 px-3 py-1 text-sm disabled:opacity-40"
-      >
+    <nav aria-label="Pagination" className="mt-4 flex items-center justify-center gap-2">
+      <Button variant="secondary" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
         Prev
-      </button>
-      <span className="text-sm text-gray-600">
+      </Button>
+      {/* aria-live so a page change is announced, not just visually updated. */}
+      <span aria-live="polite" className="text-sm text-gray-600">
         Page {page} of {totalPages}
       </span>
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= totalPages}
-        className="rounded border border-gray-300 px-3 py-1 text-sm disabled:opacity-40"
       >
         Next
-      </button>
-    </div>
+      </Button>
+    </nav>
   );
 }

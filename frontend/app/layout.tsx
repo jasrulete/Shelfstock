@@ -1,9 +1,24 @@
 import type { Metadata } from 'next';
+import { Fraunces, Inter } from 'next/font/google';
 import './globals.css';
 import { CurrencyProvider } from '@/lib/currencyContext';
 import { CartProvider } from '@/hooks/useCart';
 import NavBar from '@/components/NavBar';
 import Footer from '@/components/Footer';
+
+// Both are variable fonts, so no weight list is needed - next/font self-hosts
+// them and exposes each as a CSS variable that tailwind.config.ts reads.
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: {
@@ -15,7 +30,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
       <body>
         <CurrencyProvider>
           <CartProvider>

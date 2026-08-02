@@ -7,6 +7,8 @@ import { Product } from '@/types';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
 import { useCart } from '@/hooks/useCart';
 import { api, ApiError } from '@/lib/api';
+import Button from '@/components/ui/Button';
+import { Input } from '@/components/ui/Field';
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
@@ -40,18 +42,22 @@ export default function ProductDetailPage() {
           {formatMoney(convert(Number(product.price)), currency)}
         </p>
         <p className="mt-4 text-gray-700">{product.description}</p>
+        {/* Colours here are one step darker than the obvious amber-600/red-600
+            so each clears 4.5:1 against white. */}
         <p className="mt-2 text-sm">
           {product.stock === 0 ? (
-            <span className="text-red-600">Out of stock</span>
+            <span className="font-medium text-red-700">Out of stock</span>
           ) : product.stock <= 5 ? (
-            <span className="font-medium text-amber-600">Only {product.stock} left!</span>
+            <span className="font-medium text-amber-700">Only {product.stock} left</span>
           ) : (
-            <span className="text-green-700">In stock</span>
+            <span className="text-brand-700">In stock</span>
           )}
         </p>
 
-        <div className="mt-6 flex items-center gap-3">
-          <input
+        <div className="mt-6 flex items-end gap-3">
+          <Input
+            label="Quantity"
+            hideLabel
             type="number"
             min={1}
             max={product.stock}
@@ -64,15 +70,11 @@ export default function ProductDetailPage() {
                 Number.isNaN(parsed) ? 1 : Math.min(Math.max(1, parsed), Math.max(1, product.stock))
               );
             }}
-            className="w-20 rounded border border-gray-300 px-2 py-2"
+            wrapperClassName="w-20"
           />
-          <button
-            onClick={() => addItem(product, quantity)}
-            disabled={product.stock === 0}
-            className="rounded bg-brand-500 px-6 py-2 text-white hover:bg-brand-600 disabled:bg-gray-300"
-          >
+          <Button size="lg" onClick={() => addItem(product, quantity)} disabled={product.stock === 0}>
             Add to cart
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { auth } from "@/lib/auth";
 import { User } from "@/types";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/Field";
 
 // useSearchParams() opts a page out of static rendering unless it's wrapped
 // in a Suspense boundary - Next.js needs a fallback to show while it reads
@@ -54,31 +56,31 @@ function LoginForm() {
   return (
     <div className="mx-auto max-w-sm">
       <h1 className="mb-4 text-2xl font-bold">Log in</h1>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <input
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Email"
           type="email"
           required
-          placeholder="Email"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded border border-gray-300 px-3 py-2"
         />
-        <input
+        <Input
+          label="Password"
           type="password"
           required
-          placeholder="Password"
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded border border-gray-300 px-3 py-2"
         />
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600 disabled:opacity-60"
-        >
+        {error && (
+          <p role="alert" className="text-sm font-medium text-red-700">
+            {error}
+          </p>
+        )}
+        <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? "Logging in..." : "Log in"}
-        </button>
+        </Button>
       </form>
       <p className="mt-3 text-sm text-gray-500">
         No account?{" "}

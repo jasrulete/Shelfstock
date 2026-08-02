@@ -8,6 +8,10 @@ import { api, ApiError } from '@/lib/api';
 import { CustomersResponse, CustomerSegment } from '@/types';
 import SegmentBadge from '@/components/SegmentBadge';
 import Pagination from '@/components/Pagination';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import FilterPill from '@/components/ui/FilterPill';
+import { Input } from '@/components/ui/Field';
 
 const SEGMENT_FILTERS: Array<{ label: string; value: '' | CustomerSegment }> = [
   { label: 'All', value: '' },
@@ -50,7 +54,12 @@ export default function AdminCustomersPage() {
     loadCustomers();
   }, [router, loadCustomers]);
 
-  if (error && !data) return <p className="text-red-500">{error}</p>;
+  if (error && !data)
+    return (
+      <p role="alert" className="font-medium text-red-700">
+        {error}
+      </p>
+    );
 
   return (
     <div className="space-y-4">
@@ -58,20 +67,16 @@ export default function AdminCustomersPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         {SEGMENT_FILTERS.map((f) => (
-          <button
+          <FilterPill
             key={f.value}
+            active={segmentFilter === f.value}
             onClick={() => {
               setSegmentFilter(f.value);
               setPage(1);
             }}
-            className={`rounded-full border px-3 py-1 text-sm ${
-              segmentFilter === f.value
-                ? 'border-brand-500 bg-brand-50 text-brand-700'
-                : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
-            }`}
           >
             {f.label}
-          </button>
+          </FilterPill>
         ))}
 
         <form
@@ -80,25 +85,28 @@ export default function AdminCustomersPage() {
             setSearch(searchInput.trim());
             setPage(1);
           }}
-          className="ml-auto flex gap-2"
+          className="ml-auto flex items-end gap-2"
         >
-          <input
+          <Input
+            label="Search customers"
+            hideLabel
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search email or name..."
-            className="rounded border border-gray-300 px-3 py-1 text-sm"
+            wrapperClassName="w-56"
           />
-          <button
-            type="submit"
-            className="rounded border border-gray-300 bg-white px-3 py-1 text-sm text-gray-600 hover:bg-gray-50"
-          >
+          <Button type="submit" variant="secondary">
             Search
-          </button>
+          </Button>
         </form>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-red-700">
+          {error}
+        </p>
+      )}
 
       {!data ? (
         <p className="text-gray-500">Loading customers...</p>
@@ -106,21 +114,22 @@ export default function AdminCustomersPage() {
         <p className="text-gray-500">No customers found.</p>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full rounded border border-gray-200 bg-white text-sm">
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-gray-50 text-left">
-                  <th className="p-2">Customer</th>
-                  <th className="p-2">Segment</th>
-                  <th className="p-2">Orders</th>
-                  <th className="p-2">Total Spent</th>
-                  <th className="p-2">Last Order</th>
-                  <th className="p-2">Joined</th>
+                <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                  <th className="p-2 font-medium text-gray-600">Customer</th>
+                  <th className="p-2 font-medium text-gray-600">Segment</th>
+                  <th className="p-2 font-medium text-gray-600">Orders</th>
+                  <th className="p-2 font-medium text-gray-600">Total Spent</th>
+                  <th className="p-2 font-medium text-gray-600">Last Order</th>
+                  <th className="p-2 font-medium text-gray-600">Joined</th>
                 </tr>
               </thead>
               <tbody>
                 {data.customers.map((c) => (
-                  <tr key={c.id} className="border-b last:border-0">
+                  <tr key={c.id} className="border-b border-gray-200 last:border-0">
                     <td className="p-2">
                       <Link
                         href={`/admin/customers/${c.id}`}
@@ -133,8 +142,8 @@ export default function AdminCustomersPage() {
                     <td className="p-2">
                       <SegmentBadge segment={c.segment} />
                     </td>
-                    <td className="p-2">{c.orders_count}</td>
-                    <td className="p-2">${c.total_spent.toFixed(2)}</td>
+                    <td className="p-2 tabular-nums">{c.orders_count}</td>
+                    <td className="p-2 tabular-nums">${c.total_spent.toFixed(2)}</td>
                     <td className="p-2 text-gray-500">
                       {c.last_order_at ? new Date(c.last_order_at).toLocaleDateString() : '—'}
                     </td>
@@ -145,7 +154,8 @@ export default function AdminCustomersPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </Card>
           <Pagination pagination={data.pagination} onPageChange={setPage} />
         </>
       )}

@@ -8,6 +8,9 @@ import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { Order } from '@/types';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import { Input } from '@/components/ui/Field';
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart();
@@ -54,64 +57,63 @@ export default function CheckoutPage() {
     return <p className="text-gray-500">Your cart is empty.</p>;
   }
 
-  const inputClass = 'w-full rounded border border-gray-300 px-3 py-2 text-sm';
-
   return (
     <div className="max-w-xl">
       <h1 className="mb-4 text-2xl font-bold">Checkout</h1>
 
       <form onSubmit={handlePlaceOrder} className="space-y-4">
-        <div className="rounded border border-gray-200 bg-white p-4">
+        <Card className="p-4">
           <h2 className="mb-3 font-semibold">Shipping details</h2>
           <div className="space-y-3">
-            <input
+            <Input
+              label="Full name"
               required
               maxLength={120}
-              placeholder="Full name"
+              autoComplete="name"
               value={shipping.name}
               onChange={(e) => patchShipping({ name: e.target.value })}
-              className={inputClass}
             />
-            <input
-              required
+            <Input
+              label="Phone number"
               type="tel"
+              required
               maxLength={40}
-              placeholder="Phone number"
+              autoComplete="tel"
+              hint="We'll call this number to arrange delivery."
               value={shipping.phone}
               onChange={(e) => patchShipping({ phone: e.target.value })}
-              className={inputClass}
             />
             <AddressAutocomplete
+              label="Street address"
               required
               maxLength={300}
-              placeholder="Street address"
+              placeholder="Start typing to see suggestions"
               value={shipping.address}
               onChange={(address) => patchShipping({ address })}
               onSelect={({ address, city }) =>
                 // Keep an already-typed city if the suggestion has none.
                 patchShipping({ address, ...(city ? { city } : {}) })
               }
-              className={inputClass}
             />
-            <input
+            <Input
+              label="City"
               required
               maxLength={120}
-              placeholder="City"
+              autoComplete="address-level2"
               value={shipping.city}
               onChange={(e) => patchShipping({ city: e.target.value })}
-              className={inputClass}
             />
           </div>
-        </div>
+        </Card>
 
-        <div className="rounded border border-gray-200 bg-white p-4">
+        <Card className="p-4">
           <h2 className="mb-3 font-semibold">Payment</h2>
           <p className="text-sm text-gray-600">
             Cash on Delivery — pay when your order arrives.
           </p>
-        </div>
+        </Card>
 
-        <div className="space-y-2 rounded border border-gray-200 bg-white p-4">
+        <Card className="space-y-2 p-4">
           <h2 className="font-semibold">Order summary</h2>
           {items.map((item) => (
             <div key={item.product.id} className="flex justify-between text-sm">
@@ -133,17 +135,17 @@ export default function CheckoutPage() {
               USD.
             </p>
           )}
-        </div>
+        </Card>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm font-medium text-red-700">
+            {error}
+          </p>
+        )}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded bg-brand-500 px-4 py-2 text-white hover:bg-brand-600 disabled:opacity-60"
-        >
+        <Button type="submit" size="lg" disabled={submitting} className="w-full">
           {submitting ? 'Placing order...' : 'Place order'}
-        </button>
+        </Button>
       </form>
     </div>
   );
