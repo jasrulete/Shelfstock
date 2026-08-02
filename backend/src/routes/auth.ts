@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db';

@@ -7,7 +7,7 @@
 //   local:   node scripts/seed-demo-users.js
 //   Railway: railway run node scripts/seed-demo-users.js
 require('dotenv').config();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
 const DEMO_USERS = [
