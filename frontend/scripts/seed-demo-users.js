@@ -1,11 +1,16 @@
-// Seed two demo accounts so reviewers can try both sides of the app:
+// Seed a demo-ready store so reviewers can try both sides of the app:
 //   admin@shelfstock.demo   / ShelfAdmin123    (admin  — dashboard, order mgmt)
 //   shopper@shelfstock.demo / ShelfShopper123  (customer — browse, checkout)
 //
-// Idempotent: re-running only resets these two demo accounts' passwords, never
-// touches real users, products, or orders. Run it wherever DATABASE_URL points:
-//   local:   node scripts/seed-demo-users.js
-//   Railway: railway run node scripts/seed-demo-users.js
+// It also creates three demo shoppers with completed orders and reviews, and
+// pulls a few products down to low stock (see setDemoStockLevels for why).
+//
+// Idempotent, and deliberately one-directional where it touches inventory: it
+// never raises a stock count and never creates a second order for a shopper who
+// already has one, so re-running cannot inflate the catalogue or the numbers on
+// the admin dashboard. Run it wherever DATABASE_URL points:
+//   local:  node scripts/seed-demo-users.js
+//   hosted: DATABASE_URL=... node scripts/seed-demo-users.js
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
@@ -37,6 +42,7 @@ async function main() {
     console.log(`seeded ${u.role.padEnd(8)} ${u.email}  /  ${u.password}`);
   }
   await seedDemoActivity();
+  await setDemoStockLevels();
 
   await pool.end();
   console.log('\nDemo accounts ready.');
@@ -158,6 +164,45 @@ async function seedDemoActivity() {
   }
 
   console.log(`seeded ${orders} demo order(s) and ${reviews} review(s)`);
+}
+
+/**
+ * Pulls a few products down to low stock.
+ *
+ * Not decoration: scarcity is the storefront's whole argument, and several
+ * features only appear when something is genuinely running low - the homepage
+ * "Low stock right now" rail, the amber badge on a product card, the "Only N
+ * left" line on the detail page. Seeded stock starts at 60-300, so a fresh
+ * install renders none of them and a reviewer never sees the feature.
+ *
+ * These are real counts, not a display trick: the rail reads whatever the
+ * database says, and buying the last unit still sells the product out.
+ *
+ * LEAST() is the important part. It lowers stock toward the target and never
+ * raises it, so running this against a store that has taken real orders can
+ * only ever be a no-op or a further reduction - it cannot resurrect inventory
+ * that has already been sold.
+ */
+const DEMO_STOCK_LEVELS = [
+  ['Mechanical Keyboard', 3],
+  ['Stainless Steel Water Bottle', 4],
+  ['Building Blocks Set', 5],
+];
+
+async function setDemoStockLevels() {
+  let adjusted = 0;
+  for (const [name, target] of DEMO_STOCK_LEVELS) {
+    const result = await pool.query(
+      `UPDATE products SET stock = LEAST(stock, $1) WHERE name = $2 AND stock > $1`,
+      [target, name]
+    );
+    adjusted += result.rowCount ?? 0;
+  }
+  console.log(
+    adjusted > 0
+      ? `set ${adjusted} product(s) to low stock so the scarcity UI is visible`
+      : 'stock already at or below demo levels, left alone'
+  );
 }
 
 main().catch((err) => {
