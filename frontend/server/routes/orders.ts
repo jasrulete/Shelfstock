@@ -3,6 +3,7 @@ import { pool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
 import { OrderStatus } from '../types';
+import { ORDER_STATUSES, canTransition } from '../orderStatus';
 import { sendOrderConfirmation, sendOrderShipped } from '../mail';
 
 const router = Router();
@@ -11,8 +12,6 @@ interface CartItemInput {
   productId: number;
   quantity: number;
 }
-
-const ORDER_STATUSES: OrderStatus[] = ['pending', 'shipped', 'completed', 'cancelled'];
 
 function parseId(raw: string): number | null {
   // Reject "12abc", floats, negatives - anything that isn't a plain
@@ -285,10 +284,12 @@ router.get('/:id', requireAuth, async (req, res) => {
 /**
  * PATCH /api/orders/:id/status - admin-only order lifecycle management.
  *
- * Cancelling an order restores the stock it reserved, inside the same
- * transaction that flips the status. 'cancelled' is terminal: once stock
- * has been restored, allowing the order back out of 'cancelled' would
- * double-count inventory.
+ * Every change is checked against ALLOWED_TRANSITIONS (see ../orderStatus)
+ * while the order row is locked, so the matrix - not the admin UI - is what
+ * decides which moves exist. Cancelling restores the stock the order
+ * reserved, inside the same transaction that flips the status; the matrix is
+ * what guarantees 'cancelled' is only ever reachable from a status whose
+ * goods have not been handed over.
  */
 router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
   const orderId = parseId(req.params.id);
@@ -313,9 +314,11 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found' });
     }
-    if (order.status === 'cancelled') {
+    if (!canTransition(order.status, status)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Cancelled orders cannot change status' });
+      return res
+        .status(400)
+        .json({ error: `Cannot change an order from ${order.status} to ${status}` });
     }
 
     if (status === 'cancelled') {

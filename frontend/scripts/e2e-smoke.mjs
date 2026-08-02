@@ -117,6 +117,16 @@ for (const status of ["shipped", "completed"]) {
 }
 log(`order ${order1Id}: pending -> shipped -> completed`);
 
+// The store's whole claim is that the listing matches the shelf. Order 1 is
+// completed - delivered, cash collected - so its two units are with the
+// customer. Cancelling it must be refused, and must not put them back.
+const stockAtCompletion = (await api("/products/1")).json.stock;
+const lateCancel = await api(`/orders/${order1Id}/status`, { method: "PATCH", token: adminToken, body: { status: "cancelled" } });
+assert.equal(lateCancel.status, 400, `completed orders cannot be cancelled: ${JSON.stringify(lateCancel.json)}`);
+const afterLateCancel = await api("/products/1");
+assert.equal(afterLateCancel.json.stock, stockAtCompletion, "a refused cancellation restores no stock");
+log(`completed is terminal: cancel refused (400), stock still ${afterLateCancel.json.stock}`);
+
 const cancel = await api(`/orders/${order2Id}/status`, { method: "PATCH", token: adminToken, body: { status: "cancelled" } });
 assert.equal(cancel.json.status, "cancelled");
 const restored = await api("/products/1");
