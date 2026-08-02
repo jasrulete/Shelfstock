@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ProductsResponse } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// Same-origin, same as lib/api.ts. (This hook predates that wrapper and still
+// calls fetch directly so it can drive its own AbortController.)
+const API_URL = '';
 
 export interface ProductFilters {
   search: string;

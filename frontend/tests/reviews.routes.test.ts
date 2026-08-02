@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 
-vi.mock('../src/db', () => ({
+vi.mock('../server/db', () => ({
   pool: { query: vi.fn(), connect: vi.fn() },
 }));
 
-import { pool } from '../src/db';
-import { createApp } from '../src/app';
-import { displayName } from '../src/routes/reviews';
+import { pool } from '../server/db';
+import { createApp } from '../server/app';
+import { displayName } from '../server/routes/reviews';
 import { tokenFor } from './helpers';
 
 const poolQuery = pool.query as unknown as ReturnType<typeof vi.fn>;

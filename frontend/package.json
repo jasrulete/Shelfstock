@@ -1,5 +1,5 @@
 {
-  "name": "shelfstock-frontend",
+  "name": "shelfstock",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -7,28 +7,47 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
-    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix"
+    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:setup": "psql $DATABASE_URL -f db/schema.sql",
+    "create-admin": "node scripts/create-admin.js",
+    "seed-demo-users": "node scripts/seed-demo-users.js"
   },
-  "_comment_overrides": "Two transitive pins that next controls but we carry the risk for. postcss: next pins it exactly and that pin has landed inside a vulnerable range (GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849, sourceMappingURL path traversal). sharp: next declares ^0.34.3, which cannot reach the patched 0.35.x on its own because a caret does not cross a 0.x minor; <0.35.0 carries the libvips CVEs (CVE-2026-33327/33328/35590/35591). npm's own advice here was to downgrade to next@14, which would reintroduce the far larger set of Next advisories. Drop each override once next depends on a patched version itself.",
+  "_comment_overrides": "Two transitive pins that next controls but we carry the risk for. postcss: next pins it exactly and that pin has landed inside a vulnerable range (GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849, sourceMappingURL path traversal). sharp: next declares ^0.34.3, which cannot reach the patched 0.35.x on its own because a caret does not cross a 0.x minor; <0.35.0 carries the libvips CVEs (CVE-2026-33327/33328/35590/35591). npm's own advice was to downgrade to next@14, which would reintroduce the far larger set of Next advisories. Drop each override once next depends on a patched version itself.",
   "overrides": {
     "postcss": "^8.5.25",
     "sharp": "^0.35.3"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
     "next": "^15.5.22",
+    "pg": "^8.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/supertest": "^7.2.1",
     "autoprefixer": "^10.4.19",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.22",
     "postcss": "^8.5.25",
+    "supertest": "^7.2.2",
     "tailwindcss": "^3.4.4",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^4.1.10"
   }
 }
