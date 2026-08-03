@@ -120,9 +120,15 @@ docker compose down        # stops containers; keeps the database volume
 
 ## Features
 
-- **Storefront** — search (debounced), category/price filters, sorting,
-  server-side pagination, product detail pages, multi-currency price display
-  (USD/PHP/EUR via live exchange rates with a cached fallback).
+- **Storefront** — server-rendered listing and product pages, search
+  (debounced), category/price filters and sorting all held in the URL,
+  server-side pagination, multi-currency price display (USD/PHP/EUR via live
+  exchange rates with a cached fallback).
+- **SEO** — per-product `generateMetadata` with Open Graph and Twitter cards,
+  canonical URLs, JSON-LD `Product` structured data including price,
+  availability and aggregate rating, plus generated `sitemap.xml` and
+  `robots.txt`. A product link pasted into Messenger or LinkedIn unfurls with
+  its own title, description and photo.
 - **Cart** — localStorage-backed, synced across tabs and components,
   quantities capped at available stock.
 - **Checkout** — shipping name/phone/address/city + Cash on Delivery. Orders
@@ -151,11 +157,15 @@ shelfstock/
   docker-compose.yml         db + web, the whole stack locally
   frontend/                  the entire app; Vercel root directory
     app/                     App Router pages
+      page.tsx               storefront, a Server Component
+      products/[id]/         product page, a Server Component + client islands
+      sitemap.ts robots.ts   generated from the database
     pages/api/[...path].ts   mounts the whole Express app as one function
     pages/api/cron/winback.ts
     server/                  the Express API
       app.ts                 createApp() - no listen()
       orderStatus.ts         the order transition matrix
+      queries/products.ts    product reads, shared by the API and the pages
       routes/                products, orders, auth, categories,
                              customers, analytics, reviews
       db/index.ts            pg Pool, cached on globalThis
@@ -180,10 +190,25 @@ adapter. `pages/` and `app/` coexisting is intentional.
   isn't enough to read someone else's order. See `frontend/server/routes/orders.ts`.
 - **Server-side pagination** — `LIMIT`/`OFFSET` in SQL, not "fetch everything
   and slice in JS." See `frontend/server/routes/products.ts`.
-- **Debounce + AbortController** — the product search box waits 400ms after
-  typing stops, and cancels any in-flight request when a newer one starts, so
-  a slow response for an old keystroke can't overwrite a newer result. See
-  `frontend/hooks/useProducts.ts`.
+- **Server rendering with one shared query layer** — `/` and `/products/[id]`
+  are Server Components that read the database directly through
+  `frontend/server/queries/products.ts`. They cannot go through the HTTP API,
+  because `lib/api.ts` is deliberately relative and has no absolute base to
+  fetch; rather than let the pages grow a second copy of the SQL, the Express
+  routes and the pages call the same functions. Both pages are
+  `force-dynamic`: a cached page would show a stock count that was true a
+  minute ago, which is the one claim this store makes.
+- **Filters live in the URL** — search, category, price and sort are query
+  params read by the server, not `useState`. A filtered view is shareable,
+  bookmarkable and back-button-able, and it server-renders. The search box
+  still debounces 400ms before writing to the URL, so typing costs one history
+  entry per pause rather than one per keystroke. See
+  `frontend/components/StorefrontControls.tsx`.
+- **JSON-LD escaping** — the `Product` structured data is injected with
+  `dangerouslySetInnerHTML`, and its payload includes names an admin types.
+  `JSON.stringify` does not escape `<`, so `serializeJsonLd`
+  (`frontend/lib/jsonLd.ts`) does - otherwise a product named `</script>...`
+  is stored XSS. Covered by tests.
 - **Exchange rate caching** — live rates are fetched once and cached in
   `localStorage` for 30 minutes, with a hardcoded fallback table if the free
   API is down or rate-limited. See `frontend/hooks/useExchangeRates.ts`.
@@ -193,12 +218,13 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Testing
 
-**Unit tests** — 82 Vitest + Supertest tests with the database mocked, covering
+**Unit tests** — 85 Vitest + Supertest tests with the database mocked, covering
 auth middleware, registration/login (including the email-enumeration defense),
 pagination caps and sort-column whitelisting, the order transition matrix
-(every refused edge, and that a refused cancellation restores no stock), and
-the checkout transaction: price snapshotting (a hostile client-supplied price
-is ignored), stock decrement/restore, and row-level authorization.
+(every refused edge, and that a refused cancellation restores no stock),
+JSON-LD escaping against a script-tag breakout, and the checkout transaction:
+price snapshotting (a hostile client-supplied price is ignored), stock
+decrement/restore, and row-level authorization.
 
 ```bash
 cd frontend && npm test
