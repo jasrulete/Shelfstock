@@ -218,7 +218,7 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Testing
 
-**Unit tests** — 85 Vitest + Supertest tests with the database mocked, covering
+**API tests** — 85 Vitest + Supertest tests with the database mocked, covering
 auth middleware, registration/login (including the email-enumeration defense),
 pagination caps and sort-column whitelisting, the order transition matrix
 (every refused edge, and that a refused cancellation restores no stock),
@@ -226,9 +226,34 @@ JSON-LD escaping against a script-tag breakout, and the checkout transaction:
 price snapshotting (a hostile client-supplied price is ignored), stock
 decrement/restore, and row-level authorization.
 
+**Component tests** — 38 tests with Testing Library, aimed at the behaviour
+that is easy to break silently rather than at markup:
+
+- **Cart** (`useCart`) — quantity can never exceed the stock last seen, repeat
+  adds accumulate but stay capped, dropping to zero removes the line, state is
+  written through to `localStorage`, and a change made in another tab is picked
+  up via the `storage` event.
+- **Add-to-cart dialog** — the accessibility contract a `role="dialog"`
+  attribute does not give you: focus moves in on open, Tab and Shift+Tab wrap
+  inside it, Escape closes, the page behind is scroll-locked, and focus returns
+  to whatever opened it.
+- **Storefront filters** (`StorefrontControls`) — search is debounced to one
+  navigation per pause rather than one per keystroke, filters go through
+  `push` so the back button undoes them, changing a filter drops the stale page
+  number while keeping the other filters, and the controls re-sync when the URL
+  changes underneath them.
+
+Vitest runs these as two projects: the API suite on Node, the component suite
+on a DOM (`.ts` vs `.tsx` selects between them), so the server tests don't pay
+for a DOM on every run.
+
 ```bash
-cd frontend && npm test
+cd frontend && npm test              # both
+npx vitest run --project server      # or just one
 ```
+
+Each behavioural claim above was checked by breaking the production code on
+purpose and confirming the right tests — and only those — went red.
 
 **End-to-end smoke test** — the same invariants exercised against the real,
 Dockerized stack (PostgreSQL + the app, no mocks): register → checkout → stock
