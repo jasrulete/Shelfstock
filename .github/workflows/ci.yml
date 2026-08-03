@@ -37,6 +37,15 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # The storefront pages are Server Components, so the build imports
+          # the server modules to collect page data - and the pg Pool is
+          # constructed at import time, throwing without a connection string.
+          # These are placeholders that are never connected to: every page that
+          # reads the database is force-dynamic, so nothing queries at build
+          # time. Same values the Dockerfile already uses for the same reason.
+          DATABASE_URL: postgres://build:build@localhost:5432/build
+          JWT_SECRET: build-time-placeholder-value-32-characters
 
       # Fails the build on a known-vulnerable dependency. Scoped to high and
       # above so a low-severity advisory in a dev tool can't block a deploy,
