@@ -1,95 +1,111 @@
-'use client';
-
-import { useState } from 'react';
-import { defaultFilters, useProducts } from '@/hooks/useProducts';
-import SearchBar from '@/components/SearchBar';
-import FilterPanel from '@/components/FilterPanel';
+import type { Metadata } from 'next';
+import Link from 'next/link';
 import ProductCard from '@/components/ProductCard';
-import Pagination from '@/components/Pagination';
-import StorefrontHero from '@/components/StorefrontHero';
-import Button from '@/components/ui/Button';
+import StorefrontControls from '@/components/StorefrontControls';
+import StorefrontPagination from '@/components/StorefrontPagination';
+import StorefrontHero, { LowStockItem } from '@/components/StorefrontHero';
 import Card from '@/components/ui/Card';
+import { Product } from '@/types';
+import { listCategories, listLowStock, listProducts } from '@/server/queries/products';
+
+/**
+ * Rendered per request. Stock counts are the point of this storefront - both
+ * the grid's "Only N left" badges and the hero's scarcity rail - so a cached
+ * copy would be showing numbers that were true a minute ago.
+ */
+export const dynamic = 'force-dynamic';
+
+/**
+ * Every filter permutation is a query string on this one page, so they all
+ * canonicalise back to it. Without this, `?category=Books`, `?sort=price:asc`
+ * and every combination of them look to a crawler like separate pages with
+ * near-identical content, which is how a small catalogue gets treated as
+ * duplicate content. `metadataBase` in the root layout makes this absolute.
+ */
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
 
 // One column on phones (ProductCard switches to a horizontal row at that size),
-// then two/three/four as the viewport allows. Shared by the grid and its
-// skeleton so the placeholder can never drift from the real layout.
+// then two/three/four as the viewport allows.
 const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
 
-export default function HomePage() {
-  const [filters, setFilters] = useState(defaultFilters);
-  const { data, loading, error } = useProducts(filters);
+type SearchParams = Record<string, string | string[] | undefined>;
 
-  function patchFilters(patch: Partial<typeof filters>) {
-    setFilters((prev) => ({ ...prev, ...patch }));
-  }
+/** Query strings can repeat a key; take the first and let the query layer do
+ *  the clamping and whitelisting. */
+function one(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+
+  const filters = {
+    search: one(params.search),
+    category: one(params.category),
+    minPrice: one(params.minPrice),
+    maxPrice: one(params.maxPrice),
+    sort: one(params.sort),
+    order: one(params.order),
+    page: one(params.page),
+  };
+
+  // One round trip each, in parallel, on the server - rather than three
+  // sequential client fetches after hydration.
+  const [{ products, pagination }, categories, lowStock] = await Promise.all([
+    listProducts(filters),
+    listCategories(),
+    listLowStock({ limit: '4' }),
+  ]);
 
   // Sort/order always have a value, so they don't count as "filtering".
-  const hasActiveFilters =
-    filters.search !== '' ||
-    filters.category !== '' ||
-    filters.minPrice !== '' ||
-    filters.maxPrice !== '';
+  const hasActiveFilters = Boolean(
+    filters.search || filters.category || filters.minPrice || filters.maxPrice
+  );
 
   return (
     <div className="space-y-8">
-      {/* The page's h1 now lives in the hero; browsing is a section beneath it. */}
-      <StorefrontHero />
+      {/* The page's h1 lives in the hero; browsing is a section beneath it. */}
+      <StorefrontHero items={lowStock as LowStockItem[]} />
 
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Everything in stock</h2>
 
-        <SearchBar value={filters.search} onChange={(search) => patchFilters({ search, page: 1 })} />
-        <FilterPanel filters={filters} onChange={patchFilters} />
+        <StorefrontControls categories={categories} />
 
-      {error && (
-        <p role="alert" className="font-medium text-red-700">
-          {error}
-        </p>
-      )}
-
-      {loading && !data ? (
-        <div className={GRID}>
-          {Array.from({ length: 8 }, (_, i) => (
-            <Card key={i} className="flex animate-pulse gap-3 p-3 sm:flex-col sm:gap-0">
-              <div className="aspect-square w-24 shrink-0 rounded bg-gray-200 sm:mb-3 sm:w-full" />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <div className="mb-2 h-4 w-3/4 rounded bg-gray-200" />
-                <div className="mb-4 h-3 w-full rounded bg-gray-100" />
-                <div className="mt-auto flex items-center justify-between">
-                  <div className="h-4 w-14 rounded bg-gray-200" />
-                  <div className="h-8 w-24 rounded bg-gray-100" />
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : data && data.products.length === 0 ? (
-        // An empty result is a dead end unless it offers the way out of it.
-        <Card className="p-8 text-center">
-          <p className="text-gray-600">
-            {hasActiveFilters
-              ? 'No products match your filters.'
-              : 'There are no products in the store yet.'}
-          </p>
-          {hasActiveFilters && (
-            <Button variant="secondary" className="mt-4" onClick={() => setFilters(defaultFilters)}>
-              Clear filters
-            </Button>
-          )}
-        </Card>
-      ) : (
-        <div className={GRID}>
-          {data?.products.map((product, i) => (
-            // The first row is above the fold at every breakpoint (4 cards at
-            // the widest); the rest stay lazy.
-            <ProductCard key={product.id} product={product} priority={i < 4} />
-          ))}
-        </div>
-      )}
-
-        {data && (
-          <Pagination pagination={data.pagination} onPageChange={(page) => patchFilters({ page })} />
+        {products.length === 0 ? (
+          // An empty result is a dead end unless it offers the way out of it.
+          <Card className="p-8 text-center">
+            <p className="text-gray-600">
+              {hasActiveFilters
+                ? 'No products match your filters.'
+                : 'There are no products in the store yet.'}
+            </p>
+            {hasActiveFilters && (
+              <Link
+                href="/"
+                className="mt-4 inline-block rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium hover:border-gray-400"
+              >
+                Clear filters
+              </Link>
+            )}
+          </Card>
+        ) : (
+          <div className={GRID}>
+            {(products as Product[]).map((product, i) => (
+              // The first row is above the fold at every breakpoint (4 cards at
+              // the widest); the rest stay lazy.
+              <ProductCard key={product.id} product={product} priority={i < 4} />
+            ))}
+          </div>
         )}
+
+        <StorefrontPagination pagination={pagination} searchParams={params} />
       </section>
     </div>
   );

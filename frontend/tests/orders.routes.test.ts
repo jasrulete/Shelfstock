@@ -11,6 +11,8 @@ vi.mock('../server/mail', () => ({
 
 import { pool } from '../server/db';
 import { createApp } from '../server/app';
+import { ALLOWED_TRANSITIONS } from '../server/orderStatus';
+import type { OrderStatus } from '../server/types';
 import { tokenFor } from './helpers';
 
 const poolQuery = pool.query as unknown as ReturnType<typeof vi.fn>;
@@ -258,12 +260,19 @@ describe('PATCH /api/orders/:id/status', () => {
     expect(res.body.error).toContain('status must be one of');
   });
 
+  /** Mocks the transaction so the locked order row reports `from`. */
+  function orderInStatus(from: OrderStatus, to: OrderStatus) {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FOR UPDATE')) return { rows: [{ id: 5, status: from, user_id: 2 }] };
+      if (sql.includes('UPDATE orders SET status')) {
+        return { rows: [{ id: 5, status: to, user_id: 2 }] };
+      }
+      return { rows: [] };
+    });
+  }
+
   it('treats cancelled as terminal', async () => {
-    clientQuery.mockImplementation(async (sql: string) =>
-      sql.includes('FOR UPDATE')
-        ? { rows: [{ id: 5, status: 'cancelled', user_id: 2 }] }
-        : { rows: [] }
-    );
+    orderInStatus('cancelled', 'pending');
 
     const res = await request(app)
       .patch('/api/orders/5/status')
@@ -271,8 +280,94 @@ describe('PATCH /api/orders/:id/status', () => {
       .send({ status: 'pending' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Cancelled orders cannot change status');
+    expect(res.body.error).toBe('Cannot change an order from cancelled to pending');
     expect(txCall('ROLLBACK')).toBeDefined();
+  });
+
+  // The bug this matrix exists to prevent: a completed order is one whose
+  // goods have been handed over and whose cash has been collected. Cancelling
+  // it used to run the stock-restore UPDATE, putting sold goods back on the
+  // shelf. There is no returns flow in this codebase, so completed is terminal.
+  it('refuses to cancel a completed order, and does not restore its stock', async () => {
+    orderInStatus('completed', 'cancelled');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'cancelled' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Cannot change an order from completed to cancelled');
+    expect(txCall('stock = p.stock + oi.quantity')).toBeUndefined();
+    expect(txCall('UPDATE orders SET status')).toBeUndefined();
+    expect(txCall('ROLLBACK')).toBeDefined();
+  });
+
+  it('refuses to move a completed order back to pending', async () => {
+    orderInStatus('completed', 'pending');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'pending' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Cannot change an order from completed to pending');
+    expect(txCall('UPDATE orders SET status')).toBeUndefined();
+  });
+
+  it('refuses to move a shipped order back to pending', async () => {
+    orderInStatus('shipped', 'pending');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'pending' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Cannot change an order from shipped to pending');
+    expect(txCall('UPDATE orders SET status')).toBeUndefined();
+  });
+
+  it('refuses a no-op transition to the status the order is already in', async () => {
+    orderInStatus('pending', 'pending');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'pending' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Cannot change an order from pending to pending');
+    expect(txCall('UPDATE orders SET status')).toBeUndefined();
+  });
+
+  // Refusing delivery of a COD order is the one case where goods genuinely
+  // come back, so shipped -> cancelled must still restore stock.
+  it('restores stock when a shipped order is cancelled', async () => {
+    orderInStatus('shipped', 'cancelled');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'cancelled' });
+
+    expect(res.status).toBe(200);
+    expect(txCall('stock = p.stock + oi.quantity')![1]).toEqual([5]);
+    expect(txCall('COMMIT')).toBeDefined();
+  });
+
+  it('allows a shipped order to complete without touching stock', async () => {
+    orderInStatus('shipped', 'completed');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'completed' });
+
+    expect(res.status).toBe(200);
+    expect(txCall('stock = p.stock + oi.quantity')).toBeUndefined();
+    expect(txCall('COMMIT')).toBeDefined();
   });
 
   it('restores reserved stock when cancelling, inside the same transaction', async () => {
@@ -295,6 +390,20 @@ describe('PATCH /api/orders/:id/status', () => {
     expect(restore).toBeDefined();
     expect(restore[1]).toEqual([5]);
     expect(txCall('COMMIT')).toBeDefined();
+  });
+
+  // Locks the shape of the matrix itself: every status is covered, and the
+  // two end states have no way out. Without this, a future edit could quietly
+  // reopen completed -> cancelled and only the route tests above would notice.
+  it('defines an exit list for every status, with completed and cancelled terminal', () => {
+    expect(Object.keys(ALLOWED_TRANSITIONS).sort()).toEqual([
+      'cancelled',
+      'completed',
+      'pending',
+      'shipped',
+    ]);
+    expect(ALLOWED_TRANSITIONS.completed).toEqual([]);
+    expect(ALLOWED_TRANSITIONS.cancelled).toEqual([]);
   });
 
   it('does not touch stock for a normal pending -> shipped transition', async () => {

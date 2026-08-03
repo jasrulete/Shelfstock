@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Fraunces, Inter } from 'next/font/google';
 import './globals.css';
+import { siteUrl } from '@/lib/siteUrl';
 import { CurrencyProvider } from '@/lib/currencyContext';
 import { CartProvider } from '@/hooks/useCart';
 import NavBar from '@/components/NavBar';
@@ -20,12 +21,30 @@ const fraunces = Fraunces({
   display: 'swap',
 });
 
+const description =
+  'Real stock counts, updated the moment someone buys. Pay the courier when your order reaches your door.';
+
 export const metadata: Metadata = {
+  // Without metadataBase, Next emits relative og:image URLs, which every
+  // crawler and link unfurler ignores - the card renders with no picture.
+  metadataBase: new URL(siteUrl),
   title: {
-    default: 'ShelfStock',
+    default: 'ShelfStock - if it is on the page, it is on the shelf',
     template: '%s | ShelfStock',
   },
-  description: 'ShelfStock - an online store for electronics, books, apparel, and more.',
+  description,
+  openGraph: {
+    type: 'website',
+    siteName: 'ShelfStock',
+    title: 'ShelfStock - if it is on the page, it is on the shelf',
+    description,
+    url: siteUrl,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ShelfStock - if it is on the page, it is on the shelf',
+    description,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -5,11 +5,13 @@
 **🔗 Live demo: [shelfstock-jer2x.vercel.app](https://shelfstock-jer2x.vercel.app/)**
 
 A full-stack e-commerce storefront: product browsing/search/filtering, a cart,
-Cash-on-Delivery checkout with shipping details, a full order lifecycle
-(pending → shipped → completed / cancelled with stock restoration), JWT auth,
-and an admin area with analytics, product management, and order fulfillment.
+Cash-on-Delivery checkout with shipping details, an order lifecycle enforced by
+a server-side transition matrix (pending → shipped → completed, with
+cancellation restoring stock only while the goods have not been handed over),
+JWT auth, and an admin area with analytics, product management, and order
+fulfillment.
 
-**Stack:** Next.js 14 (App Router) + TypeScript + Tailwind on the frontend,
+**Stack:** Next.js 15 (App Router) + TypeScript + Tailwind on the frontend,
 Express + TypeScript + PostgreSQL for the API, which runs inside the Next.js
 deployment as a serverless function. No paid services required.
 
@@ -57,7 +59,7 @@ next to `docker-compose.yml`.
 
 Fixed (compose-internal) settings, listed for completeness: the `db` service
 uses `postgres`/`postgres`/`shelfstock` as user/password/database, and the
-`api` service receives `DATABASE_URL=postgres://postgres:postgres@db:5432/shelfstock?sslmode=disable`
+`web` service receives `DATABASE_URL=postgres://postgres:postgres@db:5432/shelfstock?sslmode=disable`
 (`sslmode=disable` because the API enables SSL for any non-`localhost` DB host,
 and the bundled Postgres doesn't use SSL). `RESEND_API_KEY` (transactional
 email) is intentionally unset — the win-back email job just skips itself.
@@ -77,7 +79,11 @@ docker compose exec web node scripts/seed-demo-users.js
 
 The script is idempotent — it only resets these two accounts and never touches
 real users, products, or orders. On a hosted database, run it wherever
-`DATABASE_URL` points (e.g. `railway run node scripts/seed-demo-users.js`).
+`DATABASE_URL` points:
+
+```bash
+DATABASE_URL="postgres://..." node frontend/scripts/seed-demo-users.js
+```
 
 ### Create your own admin user
 
@@ -114,17 +120,27 @@ docker compose down        # stops containers; keeps the database volume
 
 ## Features
 
-- **Storefront** — search (debounced), category/price filters, sorting,
-  server-side pagination, product detail pages, multi-currency price display
-  (USD/PHP/EUR via live exchange rates with a cached fallback).
+- **Storefront** — server-rendered listing and product pages, search
+  (debounced), category/price filters and sorting all held in the URL,
+  server-side pagination, multi-currency price display (USD/PHP/EUR via live
+  exchange rates with a cached fallback).
+- **SEO** — per-product `generateMetadata` with Open Graph and Twitter cards,
+  canonical URLs, JSON-LD `Product` structured data including price,
+  availability and aggregate rating, plus generated `sitemap.xml` and
+  `robots.txt`. A product link pasted into Messenger or LinkedIn unfurls with
+  its own title, description and photo.
 - **Cart** — localStorage-backed, synced across tabs and components,
   quantities capped at available stock.
 - **Checkout** — shipping name/phone/address/city + Cash on Delivery. Orders
   are validated and created in a single DB transaction with row locking, and
   always stored in USD (other currencies are display-only conversions).
-- **Order lifecycle** — orders start `pending`; admins move them to
-  `shipped`/`completed`/`cancelled`. Cancelling restores the reserved stock
-  and is terminal.
+- **Order lifecycle** — orders start `pending`; admins move them along an
+  explicit transition matrix enforced server-side while the order row is
+  locked (`frontend/server/orderStatus.ts`). `pending` and `shipped` can be
+  cancelled and their reserved stock comes back — under Cash on Delivery that
+  is a refused parcel. `completed` and `cancelled` are both terminal: a
+  delivered, cash-collected order's goods are with the customer, so putting
+  them back on the shelf would make the listing disagree with the shelf.
 - **Admin** — sales dashboard (revenue over time, top products), product
   CRUD (`/admin/products`), and order fulfillment (`/admin/orders`).
 - **Security** — bcrypt password hashing, JWT auth with row-level ownership
@@ -133,10 +149,35 @@ docker compose down        # stops containers; keeps the database volume
 
 ## Project layout
 
+There is **one deployable**. The Express API runs inside the Next.js deployment
+as a serverless function; there is no separate backend service.
+
 ```
 shelfstock/
-  frontend/   Next.js app (Vercel)
+  docker-compose.yml         db + web, the whole stack locally
+  frontend/                  the entire app; Vercel root directory
+    app/                     App Router pages
+      page.tsx               storefront, a Server Component
+      products/[id]/         product page, a Server Component + client islands
+      sitemap.ts robots.ts   generated from the database
+    pages/api/[...path].ts   mounts the whole Express app as one function
+    pages/api/cron/winback.ts
+    server/                  the Express API
+      app.ts                 createApp() - no listen()
+      orderStatus.ts         the order transition matrix
+      queries/products.ts    product reads, shared by the API and the pages
+      routes/                products, orders, auth, categories,
+                             customers, analytics, reviews
+      db/index.ts            pg Pool, cached on globalThis
+    tests/                   Vitest + Supertest
+    db/schema.sql            idempotent schema + seed; doubles as the migration
+    scripts/                 create-admin, seed-demo-users, e2e-smoke
 ```
+
+`pages/api/[...path].ts` rather than `app/api/` is deliberate: Pages Router API
+routes hand the handler Node's `req`/`res`, which is what Express middleware
+expects. App Router routes use Web `Request`/`Response` and would need an
+adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Key engineering decisions (for interview walkthroughs)
 
@@ -149,10 +190,25 @@ shelfstock/
   isn't enough to read someone else's order. See `frontend/server/routes/orders.ts`.
 - **Server-side pagination** — `LIMIT`/`OFFSET` in SQL, not "fetch everything
   and slice in JS." See `frontend/server/routes/products.ts`.
-- **Debounce + AbortController** — the product search box waits 400ms after
-  typing stops, and cancels any in-flight request when a newer one starts, so
-  a slow response for an old keystroke can't overwrite a newer result. See
-  `frontend/hooks/useProducts.ts`.
+- **Server rendering with one shared query layer** — `/` and `/products/[id]`
+  are Server Components that read the database directly through
+  `frontend/server/queries/products.ts`. They cannot go through the HTTP API,
+  because `lib/api.ts` is deliberately relative and has no absolute base to
+  fetch; rather than let the pages grow a second copy of the SQL, the Express
+  routes and the pages call the same functions. Both pages are
+  `force-dynamic`: a cached page would show a stock count that was true a
+  minute ago, which is the one claim this store makes.
+- **Filters live in the URL** — search, category, price and sort are query
+  params read by the server, not `useState`. A filtered view is shareable,
+  bookmarkable and back-button-able, and it server-renders. The search box
+  still debounces 400ms before writing to the URL, so typing costs one history
+  entry per pause rather than one per keystroke. See
+  `frontend/components/StorefrontControls.tsx`.
+- **JSON-LD escaping** — the `Product` structured data is injected with
+  `dangerouslySetInnerHTML`, and its payload includes names an admin types.
+  `JSON.stringify` does not escape `<`, so `serializeJsonLd`
+  (`frontend/lib/jsonLd.ts`) does - otherwise a product named `</script>...`
+  is stored XSS. Covered by tests.
 - **Exchange rate caching** — live rates are fetched once and cached in
   `localStorage` for 30 minutes, with a hardcoded fallback table if the free
   API is down or rate-limited. See `frontend/hooks/useExchangeRates.ts`.
@@ -162,9 +218,11 @@ shelfstock/
 
 ## Testing
 
-**Unit tests** — 45 Vitest + Supertest tests with the database mocked, covering
+**Unit tests** — 85 Vitest + Supertest tests with the database mocked, covering
 auth middleware, registration/login (including the email-enumeration defense),
-pagination caps and sort-column whitelisting, and the checkout transaction:
+pagination caps and sort-column whitelisting, the order transition matrix
+(every refused edge, and that a refused cancellation restores no stock),
+JSON-LD escaping against a script-tag breakout, and the checkout transaction:
 price snapshotting (a hostile client-supplied price is ignored), stock
 decrement/restore, and row-level authorization.
 
@@ -173,9 +231,9 @@ cd frontend && npm test
 ```
 
 **End-to-end smoke test** — the same invariants exercised against the real,
-Dockerized stack (PostgreSQL + API, no mocks): register → checkout → stock
-decrement → snapshot → cross-user 404 → admin lifecycle → cancellation stock
-restore → analytics.
+Dockerized stack (PostgreSQL + the app, no mocks): register → checkout → stock
+decrement → snapshot → cross-user 404 → admin lifecycle → refusing to cancel a
+completed order → cancellation stock restore → analytics.
 
 ```bash
 docker compose up -d --wait
@@ -192,39 +250,31 @@ the smoke test against them.
 
 ### Prerequisites
 
-- Node.js 18+
-- PostgreSQL running locally (or a free instance from [Neon](https://neon.tech)
-  or [Railway](https://railway.app))
+- Node.js 22 (what CI and the Docker images use)
+- PostgreSQL running locally, or a free instance from [Neon](https://neon.tech)
 
 ### 1. Clone and install
 
+There is only one package to install — the API lives inside the Next.js app.
+
 ```bash
 cd shelfstock/frontend
-npm install
-
-cd ../frontend
 npm install
 ```
 
 ### 2. Configure environment variables
 
 ```bash
-cd shelfstock/frontend
-cp .env.example .env
-# edit .env: set DATABASE_URL to your local Postgres, and set JWT_SECRET
-# (generate one with: openssl rand -hex 32)
-
-cd ../frontend
 cp .env.example .env.local
-# defaults are fine for local dev
+# set DATABASE_URL to your local Postgres, and JWT_SECRET to 32+ characters
+# (generate one with: openssl rand -hex 32)
 ```
 
 ### 3. Create the database and load the schema
 
 ```bash
 createdb shelfstock
-cd shelfstock/frontend
-npm run db:setup   # runs src/db/schema.sql against DATABASE_URL
+npm run db:setup   # runs db/schema.sql against DATABASE_URL
 ```
 
 This also seeds a handful of demo products so the UI isn't empty. The schema
@@ -232,15 +282,14 @@ is idempotent — re-running it on an existing database is safe and applies any
 new columns/constraints (it's also how you migrate a deployed DB).
 
 > **Windows note:** `npm run db:setup` uses `psql $DATABASE_URL`, which needs
-> a POSIX shell (Git Bash). Alternatively run
-> `psql -d <your-database-url> -f src/db/schema.sql` directly.
+> a POSIX shell (Git Bash). In PowerShell, run
+> `psql -d "<your-database-url>" -f db/schema.sql` directly.
 
 ### 4. Create an admin user
 
 Register an account through the app first, then promote it:
 
 ```bash
-cd shelfstock/frontend
 npm run create-admin -- you@example.com
 ```
 
@@ -251,7 +300,6 @@ Admins see the Dashboard, Products, and Manage Orders links in the nav.
 There is only one app to start - the API is served by the same Next.js process.
 
 ```bash
-cd shelfstock/frontend
 npm run dev         # http://localhost:3000
 ```
 
@@ -293,7 +341,10 @@ bundle that can outlive the server it points at.
 | POST            | `/api/auth/register`               | –                |
 | POST            | `/api/auth/login`                  | –                |
 | GET             | `/api/products`                    | –                |
+| GET             | `/api/products/low-stock`          | –                |
 | GET             | `/api/products/:id`                | –                |
+| GET             | `/api/products/:id/reviews`        | –                |
+| POST            | `/api/products/:id/reviews`        | user             |
 | GET             | `/api/categories`                  | –                |
 | POST/PUT/DELETE | `/api/products/:id`                | admin            |
 | POST            | `/api/orders`                      | user             |

@@ -3,6 +3,12 @@ import { pool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
 import reviewsRouter from './reviews';
+import {
+  ProductListParams,
+  getProductById,
+  listLowStock,
+  listProducts,
+} from '../queries/products';
 
 const router = Router();
 
@@ -112,74 +118,7 @@ async function replaceGallery(
  */
 router.get('/', async (req, res) => {
   try {
-    const {
-      search,
-      category,
-      minPrice,
-      maxPrice,
-      sort = 'created_at',
-      order = 'desc',
-      page = '1',
-      limit = '12',
-    } = req.query as Record<string, string | undefined>;
-
-    const sortColumn = SORTABLE_COLUMNS.has(sort ?? '') ? sort : 'created_at';
-    const sortOrder = order?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-
-    const pageNum = Math.max(1, parseInt(page ?? '1', 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit ?? '12', 10) || 12));
-    const offset = (pageNum - 1) * limitNum;
-
-    const conditions: string[] = [];
-    const values: unknown[] = [];
-
-    if (search) {
-      values.push(`%${search}%`);
-      conditions.push(`name ILIKE $${values.length}`);
-    }
-    if (category) {
-      values.push(category);
-      conditions.push(`category = $${values.length}`);
-    }
-    if (minPrice) {
-      values.push(Number(minPrice));
-      conditions.push(`price >= $${values.length}`);
-    }
-    if (maxPrice) {
-      values.push(Number(maxPrice));
-      conditions.push(`price <= $${values.length}`);
-    }
-
-    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM products ${whereClause}`,
-      values
-    );
-    const total = countResult.rows[0].total as number;
-
-    values.push(limitNum, offset);
-    const dataResult = await pool.query(
-      `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
-              p.created_at,
-              ${RATING_COLUMNS}
-       FROM products p
-       ${RATING_JOIN}
-       ${whereClause}
-       ORDER BY ${sortColumn} ${sortOrder}
-       LIMIT $${values.length - 1} OFFSET $${values.length}`,
-      values
-    );
-
-    res.json({
-      products: dataResult.rows,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages: Math.ceil(total / limitNum),
-      },
-    });
+    res.json(await listProducts(req.query as ProductListParams));
   } catch (err) {
     console.error('List products error:', err);
     res.status(500).json({ error: 'Failed to fetch products' });
@@ -198,22 +137,8 @@ router.get('/', async (req, res) => {
  * and '/:id' would otherwise swallow '/low-stock' and 404 on parseId().
  */
 router.get('/low-stock', async (req, res) => {
-  const threshold = Math.min(
-    20,
-    Math.max(1, parseInt((req.query.threshold as string) ?? '5', 10) || 5)
-  );
-  const limit = Math.min(12, Math.max(1, parseInt((req.query.limit as string) ?? '4', 10) || 4));
-
   try {
-    const result = await pool.query(
-      `SELECT id, name, price, stock, image_url
-       FROM products
-       WHERE stock > 0 AND stock <= $1
-       ORDER BY stock ASC, name ASC
-       LIMIT $2`,
-      [threshold, limit]
-    );
-    res.json(result.rows);
+    res.json(await listLowStock(req.query as { threshold?: string; limit?: string }));
   } catch (err) {
     console.error('Low stock products error:', err);
     res.status(500).json({ error: 'Failed to fetch low stock products' });
@@ -262,32 +187,11 @@ router.get('/:id', async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      `SELECT p.*, ${RATING_COLUMNS}
-       FROM products p
-       ${RATING_JOIN}
-       WHERE p.id = $1`,
-      [id]
-    );
-    if (result.rows.length === 0) {
+    const product = await getProductById(id);
+    if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
-    const product = result.rows[0];
-
-    // The cover image leads the gallery, then the extra angles in order. Sent
-    // as one ready-to-render array so the client isn't left stitching
-    // image_url onto a separate list and getting the order wrong.
-    const gallery = await pool.query(
-      `SELECT url FROM product_images
-       WHERE product_id = $1
-       ORDER BY position ASC, id ASC`,
-      [id]
-    );
-    const images = [product.image_url, ...gallery.rows.map((r) => r.url as string)].filter(
-      (url): url is string => Boolean(url)
-    );
-
-    res.json({ ...product, images });
+    res.json(product);
   } catch (err) {
     console.error('Get product error:', err);
     res.status(500).json({ error: 'Failed to fetch product' });

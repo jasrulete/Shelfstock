@@ -6,6 +6,10 @@ import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { AdminOrder, AdminOrdersResponse, OrderStatus } from '@/types';
+// The dropdown offers exactly what the API will accept. Keeping a second copy
+// of this map here is what let the UI advertise completed -> cancelled after
+// the server stopped allowing it.
+import { ALLOWED_TRANSITIONS as NEXT_STATUSES } from '@/server/orderStatus';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import Pagination from '@/components/Pagination';
 import Card from '@/components/ui/Card';
@@ -18,16 +22,6 @@ const STATUS_FILTERS: Array<{ label: string; value: string }> = [
   { label: 'Completed', value: 'completed' },
   { label: 'Cancelled', value: 'cancelled' },
 ];
-
-// Statuses an admin can move an order INTO. 'cancelled' is terminal on the
-// backend (stock is restored when entering it), so it never appears as a
-// source of further transitions.
-const NEXT_STATUSES: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['shipped', 'completed', 'cancelled'],
-  shipped: ['completed', 'cancelled'],
-  completed: ['cancelled'],
-  cancelled: [],
-};
 
 export default function AdminOrdersPage() {
   const router = useRouter();

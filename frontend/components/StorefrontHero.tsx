@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import ProductImage from './ui/ProductImage';
 import Link from 'next/link';
-import { api } from '@/lib/api';
 import { useCurrency, formatMoney } from '@/lib/currencyContext';
 import Card from './ui/Card';
 
-/** Subset of Product returned by /api/products/low-stock. */
-interface LowStockItem {
+/** Subset of Product the low-stock query returns. */
+export interface LowStockItem {
   id: number;
   name: string;
   price: string;
@@ -27,19 +25,14 @@ interface LowStockItem {
  * Every claim in the copy is backed by something the app actually does. There
  * is deliberately no returns or shipping-time promise here, because nothing in
  * the codebase implements one.
+ *
+ * The rail is handed in by the server rather than fetched after hydration, so
+ * the scarcity counts are in the first HTML response - they used to be one of
+ * three client requests the page waited on before it showed anything.
+ * Still a client component, because the prices follow the currency selector.
  */
-export default function StorefrontHero() {
+export default function StorefrontHero({ items }: { items: LowStockItem[] }) {
   const { currency, convert } = useCurrency();
-  const [items, setItems] = useState<LowStockItem[] | null>(null);
-
-  useEffect(() => {
-    api
-      .get<LowStockItem[]>('/api/products/low-stock?limit=4')
-      .then(setItems)
-      // The rail is decoration for the hero, not its purpose - a failed fetch
-      // should leave the headline standing, not surface an error.
-      .catch(() => setItems([]));
-  }, []);
 
   return (
     <Card className="overflow-hidden">
@@ -75,8 +68,9 @@ export default function StorefrontHero() {
           </ul>
         </div>
 
-        {/* Rail hidden entirely while loading or when nothing qualifies. */}
-        {items && items.length > 0 && (
+        {/* Rail hidden entirely when nothing qualifies - an empty "Low stock"
+            box would be worse than no box. */}
+        {items.length > 0 && (
           <div className="flex flex-col gap-2.5 border-gray-200 bg-gray-50 p-5 md:border-l">
             <h2 className="font-mono text-[0.65rem] uppercase tracking-[0.1em] text-gray-500">
               Low stock right now
