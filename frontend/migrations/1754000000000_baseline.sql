@@ -1,5 +1,20 @@
--- ShelfStock database schema
--- Run with: psql $DATABASE_URL -f src/db/schema.sql
+-- Baseline: the schema as it stood when migrations were introduced.
+--
+-- Every statement is idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING /
+-- guarded UPDATEs), which is what makes adopting an existing database safe:
+-- running this against production, which already has all of it, changes
+-- nothing and simply records the migration as applied. There is no separate
+-- "baseline" or "fake apply" step to get wrong.
+--
+-- Forward-only, deliberately: no Down section here or in any later migration.
+-- A down migration for this file would drop every table in the store, and for
+-- a later one would drop the column it added - destroying the data in it. The
+-- recovery path for a bad migration is a database restore, not a DROP that
+-- runs perfectly and loses the rows anyway.
+--
+-- Migrations from here on should contain schema changes only. The seed data
+-- below is here because it is what this file already did.
+
 
 CREATE TABLE IF NOT EXISTS users (
   id            SERIAL PRIMARY KEY,

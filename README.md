@@ -26,8 +26,8 @@ docker compose up -d --build
 ```
 
 Then open **http://localhost:3000**. On the first start Docker builds both
-images (a few minutes) and Postgres applies `frontend/db/schema.sql`
-automatically, so the store comes up with demo products already seeded.
+images (a few minutes) and a one-shot `migrate` service applies the
+migrations, so the store comes up with demo products already seeded.
 
 ### What's running
 
@@ -35,6 +35,7 @@ automatically, so the store comes up with demo products already seeded.
 | ------- | ---------------------- | -------------- | ------------------- | ---------------------------------------------------- |
 | `web`   | `frontend/Dockerfile`  | 3000           | `3000`              | Next.js storefront + admin UI                        |
 | `db`    | `postgres:17-alpine`   | 5432           | `5433`              | PostgreSQL; data persists in the `db_data` volume    |
+| `migrate` | `frontend/Dockerfile` (migrate stage) | – | – | Runs `node-pg-migrate up` once, then exits. `web` waits for it. |
 
 Startup is ordered by healthchecks: `db` must pass `pg_isready` before `web`
 starts, and `web` must answer `/api/health` (which touches Postgres) before it
@@ -106,10 +107,10 @@ docker compose down -v     # -v deletes the db_data volume
 docker compose up -d
 ```
 
-To re-apply the (idempotent) schema after pulling updates, without losing data:
+To apply new migrations after pulling updates, without losing data:
 
 ```bash
-docker compose exec db psql -U postgres -d shelfstock -f /docker-entrypoint-initdb.d/schema.sql
+docker compose run --rm migrate
 ```
 
 ### Stop
@@ -170,7 +171,7 @@ shelfstock/
                              customers, analytics, reviews
       db/index.ts            pg Pool, cached on globalThis
     tests/                   Vitest + Supertest
-    db/schema.sql            idempotent schema + seed; doubles as the migration
+    migrations/              ordered SQL migrations (node-pg-migrate)
     scripts/                 create-admin, seed-demo-users, e2e-smoke
 ```
 
@@ -183,7 +184,7 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 - **Price snapshotting** — `order_items.price_at_purchase` is copied from the
   product's price at checkout time, not a live reference to `products.price`.
-  See the comment block in `frontend/db/schema.sql` and
+  See the comment block in `frontend/migrations/` and
   `frontend/server/routes/orders.ts`.
 - **Row-level authorization** — `GET /api/orders/:id` checks
   `req.user.id === order.user_id` in the handler itself; a valid JWT alone
@@ -204,6 +205,16 @@ adapter. `pages/` and `app/` coexisting is intentional.
   still debounces 400ms before writing to the URL, so typing costs one history
   entry per pause rather than one per keystroke. See
   `frontend/components/StorefrontControls.tsx`.
+- **Forward-only migrations, adopted rather than reset** — schema changes are
+  ordered SQL files under `frontend/migrations/`, applied by `node-pg-migrate`
+  and recorded in a `pgmigrations` table, so "what is this database on?" has an
+  answer. The baseline is the whole schema as it stood when migrations were
+  introduced, and every statement in it is idempotent — which is what lets an
+  existing production database adopt it by simply running `migrate up`, with no
+  "fake apply" step to get wrong. Deliberately no down migrations: one for the
+  baseline would drop every table, and one for a later change would drop the
+  column it added and the data in it. The recovery path for a bad migration is
+  a restore, not a DROP that succeeds and loses the rows anyway.
 - **The connection pool is built on first use, not on import** — the
   storefront pages are Server Components, so `next build` imports the server
   modules to collect page data. While the `pg` Pool was constructed at import
@@ -323,16 +334,16 @@ cp .env.example .env.local
 
 ```bash
 createdb shelfstock
-npm run db:setup   # runs db/schema.sql against DATABASE_URL
+npm run db:setup   # applies all migrations to DATABASE_URL
 ```
 
 This also seeds a handful of demo products so the UI isn't empty. The schema
 is idempotent — re-running it on an existing database is safe and applies any
 new columns/constraints (it's also how you migrate a deployed DB).
 
-> **Windows note:** `npm run db:setup` uses `psql $DATABASE_URL`, which needs
-> a POSIX shell (Git Bash). In PowerShell, run
-> `psql -d "<your-database-url>" -f db/schema.sql` directly.
+> `db:setup` is just `node-pg-migrate up`, so it works the same in PowerShell
+> as in bash — it reads `DATABASE_URL` from the environment rather than
+> interpolating it into a shell command.
 
 ### 4. Create an admin user
 
@@ -353,6 +364,31 @@ npm run dev         # http://localhost:3000
 ```
 
 Visit `http://localhost:3000`. The API is at `http://localhost:3000/api`.
+
+## Database migrations
+
+Ordered SQL under `frontend/migrations/`, applied by
+[node-pg-migrate](https://github.com/salsita/node-pg-migrate) and tracked in a
+`pgmigrations` table.
+
+```bash
+cd frontend
+npm run migrate:status      # dry run - what would apply
+npm run migrate:up          # apply everything pending
+npm run migrate create add-something   # scaffold the next file
+```
+
+All of them read `DATABASE_URL` from the environment.
+
+In Docker this is a one-shot `migrate` service that runs before `web` starts,
+so there is exactly one code path that brings a database up to date in every
+environment. Postgres' `docker-entrypoint-initdb.d` would have been simpler,
+but it only fires on a brand-new volume and would apply the SQL *without*
+recording it — so the next `migrate up` would try to replay it all against a
+database that already had it.
+
+New migrations should contain schema changes only. The seed data lives in the
+baseline because that is what the file it replaced already did.
 
 ## Deployment (free tiers)
 
@@ -378,8 +414,8 @@ bundle that can outlive the server it points at.
 
 1. Create a free project — no card required.
 2. Apply the schema:
-   `psql "$DATABASE_URL" -f frontend/db/schema.sql`. It is idempotent, so
-   re-run it after pulling updates to pick up new columns and tables.
+   `cd frontend && DATABASE_URL="postgres://..." npm run migrate:up`. Already
+   applied migrations are recorded and skipped, so re-run it after pulling.
 3. Optionally seed demo accounts, orders and reviews:
    `DATABASE_URL=... node frontend/scripts/seed-demo-users.js`.
 
