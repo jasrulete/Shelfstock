@@ -128,7 +128,31 @@ CREATE INDEX IF NOT EXISTS idx_winback_emails_user_id ON winback_emails(user_id)
 
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
-CREATE INDEX IF NOT EXISTS idx_products_name ON products USING GIN (to_tsvector('english', name));
+
+-- Product search.
+--
+-- Trigrams, because the storefront searches with ILIKE '%term%' so that typing
+-- "board" still finds "Keyboard". A btree index cannot serve a leading
+-- wildcard and a tsvector index cannot serve a substring at all, so without
+-- pg_trgm every search is a sequential scan.
+--
+-- Full text as well, so that "keyboards" finds "Keyboard" - trigrams match
+-- characters and have no idea the two are the same word.
+--
+-- The previous index here was GIN (to_tsvector('english', name)): name only,
+-- and nothing ever queried in a form that could use it, so it was pure write
+-- cost. Its replacement covers the description too and IS queried. The
+-- expression below has to stay character-for-character identical to
+-- SEARCH_VECTOR in server/queries/products.ts, or the planner silently
+-- ignores the index and the search goes back to a sequential scan.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+DROP INDEX IF EXISTS idx_products_name;
+CREATE INDEX IF NOT EXISTS idx_products_name_trgm
+  ON products USING GIN (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_products_description_trgm
+  ON products USING GIN (description gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_products_search_fts
+  ON products USING GIN (to_tsvector('english', name || ' ' || coalesce(description, '')));
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
