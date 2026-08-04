@@ -22,6 +22,7 @@ export interface Product {
   category: string;
   stock: number;
   image_url: string | null;
+  barcode: string | null;
   created_at: string;
 }
 
