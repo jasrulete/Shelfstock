@@ -68,6 +68,48 @@ export function parseProductId(raw: string): number | null {
 }
 
 /**
+ * `%` and `_` are wildcards inside LIKE, so a shopper searching for "50%" or
+ * "t_shirt" would otherwise get a pattern rather than the text they typed.
+ * Backslash is LIKE's default escape character, so escaping these three is
+ * enough - no ESCAPE clause needed.
+ */
+function likePattern(term: string): string {
+  return `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/**
+ * The indexed full text vector for a product.
+ *
+ * MUST stay character-for-character identical to the expression in
+ * `idx_products_search_fts` (db/schema.sql). Postgres only uses an expression
+ * index when the query repeats the expression exactly; a stray space here
+ * turns the search back into the sequential scan this whole change exists to
+ * remove, and nothing fails loudly when it does.
+ */
+export const SEARCH_VECTOR = `to_tsvector('english', name || ' ' || coalesce(description, ''))`;
+
+/**
+ * Relevance score for a search term.
+ *
+ * Matching finds rows two ways - trigrams for substrings, full text for word
+ * forms - and neither knows which hit is better. So the matched rows are
+ * ranked here, with the name weighted above the description: a product called
+ * "Mechanical Keyboard" should outrank one that merely mentions keyboards in
+ * its blurb.
+ *
+ * Deliberately a different expression from SEARCH_VECTOR: ranking wants the
+ * two fields weighted separately, and it runs only over rows the indexes have
+ * already returned, so it needs no index of its own.
+ */
+function relevanceExpression(placeholder: number): string {
+  return `ts_rank(
+             setweight(to_tsvector('english', coalesce(name, '')), 'A') ||
+             setweight(to_tsvector('english', coalesce(description, '')), 'B'),
+             plainto_tsquery('english', $${placeholder})
+           )`;
+}
+
+/**
  * Pagination is done in SQL with LIMIT/OFFSET rather than fetching every row
  * and slicing in JS. That keeps memory flat and query time proportional to
  * the page size regardless of how large the products table gets.
@@ -87,9 +129,25 @@ export async function listProducts(
   const conditions: string[] = [];
   const values: unknown[] = [];
 
+  // Set when there is a search term, so the ORDER BY can reuse the same bound
+  // parameter rather than binding the term twice.
+  let searchTermPlaceholder = 0;
+
   if (search) {
-    values.push(`%${search}%`);
-    conditions.push(`name ILIKE $${values.length}`);
+    values.push(likePattern(search));
+    const like = values.length;
+    values.push(search);
+    searchTermPlaceholder = values.length;
+
+    // Three ways to match, all index-backed:
+    //   - name/description trigram, so "board" finds "Keyboard"
+    //   - full text, so "keyboards" finds "Keyboard" and "running" finds "run"
+    // Description is included because "book" and "usb" appear only in blurbs,
+    // and a search that misses them looks broken to whoever typed them.
+    conditions.push(
+      `(name ILIKE $${like} OR description ILIKE $${like}
+        OR ${SEARCH_VECTOR} @@ plainto_tsquery('english', $${searchTermPlaceholder}))`
+    );
   }
   if (category) {
     values.push(category);
@@ -112,6 +170,20 @@ export async function listProducts(
   );
   const total = countResult.rows[0].total as number;
 
+  // Relevance leads the ordering only when the shopper has not asked for a
+  // particular one. Picking "Price: low to high" and getting relevance order
+  // anyway would be the control quietly not working; leaving relevance out
+  // when they have simply typed a search would bury the best match.
+  const orderBy: string[] = [];
+  if (search && params.sort === undefined) {
+    orderBy.push(`${relevanceExpression(searchTermPlaceholder)} DESC`);
+  }
+  orderBy.push(`${sortColumn} ${sortOrder}`);
+  // Trigram-only matches all score 0, so without a unique tiebreaker their
+  // order is whatever the plan happens to produce - which can differ between
+  // page 1 and page 2 and silently drop or repeat a row.
+  orderBy.push('id DESC');
+
   values.push(limitNum, offset);
   const dataResult = await pool.query(
     `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
@@ -120,7 +192,7 @@ export async function listProducts(
        FROM products p
        ${RATING_JOIN}
        ${whereClause}
-       ORDER BY ${sortColumn} ${sortOrder}
+       ORDER BY ${orderBy.join(', ')}
        LIMIT $${values.length - 1} OFFSET $${values.length}`,
     values
   );

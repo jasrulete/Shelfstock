@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 
@@ -7,6 +10,7 @@ vi.mock('../server/db', () => ({
 
 import { pool } from '../server/db';
 import { createApp } from '../server/app';
+import { SEARCH_VECTOR } from '../server/queries/products';
 import { tokenFor } from './helpers';
 
 const poolQuery = pool.query as unknown as ReturnType<typeof vi.fn>;
@@ -58,10 +62,96 @@ describe('GET /api/products (filtering and sorting)', () => {
 
     const [countSql, countValues] = poolQuery.mock.calls[0];
     expect(countSql).toContain('name ILIKE $1');
-    expect(countSql).toContain('category = $2');
-    // The route later pushes limit/offset onto this same array, so only
-    // check the filter values at the front.
-    expect(countValues.slice(0, 2)).toEqual(['%mug%', 'Kitchen']);
+    expect(countSql).toContain('category = $3');
+    // $1 is the LIKE pattern, $2 the raw term for the full-text match. The
+    // route later pushes limit/offset onto this same array, so only check the
+    // filter values at the front.
+    expect(countValues.slice(0, 3)).toEqual(['%mug%', 'mug', 'Kitchen']);
+  });
+
+  // "book" and "usb" only ever appear in a blurb. Searching name alone made
+  // those look like products the store does not carry.
+  it('searches the description as well as the name', async () => {
+    primeList(1);
+
+    await request(app).get('/api/products?search=usb');
+
+    const [countSql] = poolQuery.mock.calls[0];
+    expect(countSql).toContain('name ILIKE $1');
+    expect(countSql).toContain('description ILIKE $1');
+  });
+
+  // Trigrams match characters, so they cannot know "keyboards" and "Keyboard"
+  // are the same word. The full-text arm of the predicate is what does.
+  it('also matches on the full-text vector, so word forms are found', async () => {
+    primeList(1);
+
+    await request(app).get('/api/products?search=keyboards');
+
+    const [countSql, countValues] = poolQuery.mock.calls[0];
+    expect(countSql).toContain(`${SEARCH_VECTOR} @@ plainto_tsquery('english', $2)`);
+    expect(countValues[1]).toBe('keyboards');
+  });
+
+  /**
+   * Postgres only uses an expression index when the query repeats the
+   * expression exactly. If schema.sql and the query drift apart, every search
+   * silently falls back to a sequential scan and no test would otherwise fail.
+   */
+  it('uses the same full-text expression that schema.sql indexes', () => {
+    const schema = readFileSync(
+      join(fileURLToPath(new URL('.', import.meta.url)), '..', 'db', 'schema.sql'),
+      'utf8'
+    );
+
+    expect(schema).toContain('idx_products_search_fts');
+    expect(schema).toContain(SEARCH_VECTOR);
+  });
+
+  it('treats LIKE wildcards in the search term as literal text', async () => {
+    primeList(1);
+
+    await request(app).get('/api/products?search=' + encodeURIComponent('100%_off'));
+
+    const [, countValues] = poolQuery.mock.calls[0];
+    // Escaped, so this finds the product literally called "100%_off" rather
+    // than matching every row.
+    expect(countValues[0]).toBe('%100\\%\\_off%');
+    // The full-text term stays as typed - it is not a LIKE pattern.
+    expect(countValues[1]).toBe('100%_off');
+  });
+
+  it('orders by relevance when the shopper has not chosen a sort', async () => {
+    primeList(1);
+
+    await request(app).get('/api/products?search=keyboard');
+
+    const [dataSql] = poolQuery.mock.calls[1];
+    expect(dataSql).toContain('ts_rank');
+    expect(dataSql).toMatch(/ORDER BY\s+ts_rank/);
+  });
+
+  // Otherwise picking "Price: low to high" would be a control that quietly
+  // does nothing while a search is active.
+  it('lets an explicit sort override relevance', async () => {
+    primeList(1);
+
+    await request(app).get('/api/products?search=keyboard&sort=price&order=asc');
+
+    const [dataSql] = poolQuery.mock.calls[1];
+    expect(dataSql).not.toContain('ts_rank');
+    expect(dataSql).toMatch(/ORDER BY\s+price ASC/);
+  });
+
+  // Trigram-only hits all rank 0, so without a unique tiebreaker their order
+  // can differ between page 1 and page 2 and silently drop or repeat a row.
+  it('always ends the ordering with a unique tiebreaker', async () => {
+    primeList(1);
+
+    await request(app).get('/api/products?search=keyboard');
+
+    const [dataSql] = poolQuery.mock.calls[1];
+    expect(dataSql).toMatch(/id DESC\s+LIMIT/);
   });
 
   it('ignores sort columns outside the whitelist (no SQL injection via sort)', async () => {
