@@ -19,10 +19,8 @@ services:
       POSTGRES_DB: shelfstock
     volumes:
       - db_data:/var/lib/postgresql/data
-      # First boot on an empty volume auto-applies the schema + demo seed
-      # data. To re-apply later (it's idempotent):
-      #   docker compose exec db psql -U postgres -d shelfstock -f /docker-entrypoint-initdb.d/schema.sql
-      - ./frontend/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      # No initdb mount any more: the schema is applied by the `migrate`
+      # service below, so there is one code path for it in every environment.
     ports:
       # Host 5433 by default so a locally installed Postgres on 5432 doesn't clash.
       - '${DB_PORT:-5433}:5432'
@@ -34,6 +32,20 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+
+  # Runs `node-pg-migrate up` once and exits. `web` waits for it to succeed, so
+  # the app never serves against a database that is a migration behind. Safe to
+  # re-run: already-applied migrations are recorded and skipped.
+  migrate:
+    build:
+      context: ./frontend
+      target: migrate
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/shelfstock?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
 
   web:
     build:
@@ -55,6 +67,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       # /api/health touches Postgres, so this reports ready only when the app
       # can actually serve data.
