@@ -8,6 +8,38 @@ const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const SALT_ROUNDS = 10;
 
+/**
+ * Deliberately not an RFC 5322 parser. That grammar allows quoted local parts
+ * and bracketed IP-literal domains that no storefront will ever be handed, and
+ * the regex for it is famously unreadable and still not a delivery guarantee.
+ *
+ * What this checks is the shape that matters here: exactly one @, something on
+ * both sides of it, a domain of two or more non-empty dot-separated labels,
+ * and no whitespace anywhere. The reason is practical rather than pedantic -
+ * every order this store places emails the address given at registration, so
+ * "asdf" is not a smaller mistake than a missing address. It fails later,
+ * silently, and forever.
+ *
+ * Requiring the labels to be non-empty is what rejects `user@.example.com` and
+ * `user@example..com`. Both are ordinary typing slips rather than exotic
+ * inputs, and both bounce forever.
+ *
+ * Requiring a dot at all rejects intranet-style addresses like
+ * `user@localhost`, which are legal but undeliverable from here. That is the
+ * intended trade. Bracketed IP-literal domains (`user@[192.168.0.1]`) still
+ * pass - excluding them costs more regex than the case is worth, and one that
+ * reaches a real mail server fails there instead.
+ */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
+// RFC 5321 caps a forward path at 254 characters; anything longer will be
+// rejected by a receiving server regardless of how well-formed it looks.
+const EMAIL_MAX_LENGTH = 254;
+
+function isDeliverableEmail(email: string): boolean {
+  return email.length <= EMAIL_MAX_LENGTH && EMAIL_PATTERN.test(email);
+}
+
 function toPublicUser(user: User): PublicUser {
   return { id: user.id, email: user.email, role: user.role };
 }
@@ -29,6 +61,12 @@ router.post('/register', async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase();
+
+  // Checked against the normalized form, so a stray leading space is trimmed
+  // rather than treated as a malformed address.
+  if (!isDeliverableEmail(normalizedEmail)) {
+    return res.status(400).json({ error: 'Enter a valid email address' });
+  }
 
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);

@@ -218,9 +218,11 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Testing
 
-**API tests** — 85 Vitest + Supertest tests with the database mocked, covering
-auth middleware, registration/login (including the email-enumeration defense),
-pagination caps and sort-column whitelisting, the order transition matrix
+**API tests** — 101 Vitest + Supertest tests with the database mocked, covering
+auth middleware, registration/login (including the email-enumeration defense
+and email-format validation, which login deliberately skips so accounts
+predating the rule can still sign in), pagination caps and sort-column
+whitelisting, the order transition matrix
 (every refused edge, and that a refused cancellation restores no stock),
 JSON-LD escaping against a script-tag breakout, and the checkout transaction:
 price snapshotting (a hostile client-supplied price is ignored), stock
@@ -256,9 +258,10 @@ Each behavioural claim above was checked by breaking the production code on
 purpose and confirming the right tests — and only those — went red.
 
 **End-to-end smoke test** — the same invariants exercised against the real,
-Dockerized stack (PostgreSQL + the app, no mocks): register → checkout → stock
-decrement → snapshot → cross-user 404 → admin lifecycle → refusing to cancel a
-completed order → cancellation stock restore → analytics.
+Dockerized stack (PostgreSQL + the app, no mocks): refusing a malformed email →
+register → checkout → stock decrement → snapshot → cross-user 404 → admin
+lifecycle → refusing to cancel a completed order → cancellation stock restore →
+analytics.
 
 ```bash
 docker compose up -d --wait
