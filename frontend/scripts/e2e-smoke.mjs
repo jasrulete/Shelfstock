@@ -48,6 +48,16 @@ const shipping = {
 };
 
 // --- shopper flow -----------------------------------------------------------
+// Every order mails the address given here, so an undeliverable one has to be
+// refused at the door rather than discovered when the confirmation bounces.
+const badEmail = await api("/auth/register", {
+  method: "POST",
+  body: { name: "E2E Smoke", email: "not-an-email", password },
+});
+assert.equal(badEmail.status, 400, `malformed email must be refused: ${JSON.stringify(badEmail.json)}`);
+assert.equal(badEmail.json.error, "Enter a valid email address");
+log("registration refuses a malformed email address");
+
 const reg = await api("/auth/register", {
   method: "POST",
   body: { name: "E2E Smoke", email, password },
