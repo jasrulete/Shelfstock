@@ -25,6 +25,20 @@ ENV NEXT_PUBLIC_EXCHANGE_RATE_API=$NEXT_PUBLIC_EXCHANGE_RATE_API \
 # request actually arrives.
 RUN npm run build
 
+# ---- migrate: one-shot migration runner, used by docker-compose ----
+#
+# The database is brought up to date by exactly one code path - `node-pg-migrate
+# up` - in every environment. Postgres' docker-entrypoint-initdb.d would have
+# been simpler, but it only runs on a brand-new volume and would apply the SQL
+# without recording it in the migrations table, so the very next `migrate up`
+# would try to replay everything against a database that already had it.
+FROM node:22-alpine AS migrate
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY migrations ./migrations
+CMD ["npx", "node-pg-migrate", "up"]
+
 # ---- runtime: standalone server only, run as non-root ----
 FROM node:22-alpine AS runtime
 WORKDIR /app

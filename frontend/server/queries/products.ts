@@ -81,7 +81,7 @@ function likePattern(term: string): string {
  * The indexed full text vector for a product.
  *
  * MUST stay character-for-character identical to the expression in
- * `idx_products_search_fts` (db/schema.sql). Postgres only uses an expression
+ * `idx_products_search_fts` (see frontend/migrations). Postgres only uses an expression
  * index when the query repeats the expression exactly; a stray space here
  * turns the search back into the sequential scan this whole change exists to
  * remove, and nothing fails loudly when it does.

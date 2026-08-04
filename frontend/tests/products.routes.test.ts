@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -103,17 +103,23 @@ describe('GET /api/products (filtering and sorting)', () => {
 
   /**
    * Postgres only uses an expression index when the query repeats the
-   * expression exactly. If schema.sql and the query drift apart, every search
-   * silently falls back to a sequential scan and no test would otherwise fail.
+   * expression exactly. If the migrations and the query drift apart, every
+   * search silently falls back to a sequential scan and no test would
+   * otherwise fail.
+   *
+   * Reads every migration rather than one named file, so that a later
+   * migration redefining the index is what this checks against.
    */
-  it('uses the same full-text expression that schema.sql indexes', () => {
-    const schema = readFileSync(
-      join(fileURLToPath(new URL('.', import.meta.url)), '..', 'db', 'schema.sql'),
-      'utf8'
-    );
+  it('uses the same full-text expression that the migrations index', () => {
+    const dir = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations');
+    const applied = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => readFileSync(join(dir, f), 'utf8'))
+      .join('\n');
 
-    expect(schema).toContain('idx_products_search_fts');
-    expect(schema).toContain(SEARCH_VECTOR);
+    expect(applied).toContain('idx_products_search_fts');
+    expect(applied).toContain(SEARCH_VECTOR);
   });
 
   it('treats LIKE wildcards in the search term as literal text', async () => {
