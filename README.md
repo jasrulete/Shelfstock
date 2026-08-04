@@ -204,6 +204,15 @@ adapter. `pages/` and `app/` coexisting is intentional.
   still debounces 400ms before writing to the URL, so typing costs one history
   entry per pause rather than one per keystroke. See
   `frontend/components/StorefrontControls.tsx`.
+- **The connection pool is built on first use, not on import** — the
+  storefront pages are Server Components, so `next build` imports the server
+  modules to collect page data. While the `pg` Pool was constructed at import
+  time, that made the build itself require a `DATABASE_URL` it never connects
+  to, and both CI and the Dockerfile carried a fake one. `server/db/index.ts`
+  now hands back a proxy that builds the real pool the first time anything
+  touches it, so every `pool.query(...)` call site is unchanged and the build
+  needs no database. A missing `DATABASE_URL` still fails by name on the first
+  request rather than being swallowed.
 - **Search: trigrams for matching, full text for ranking** — the search box
   is a substring search, so `ILIKE '%term%'` cannot use a btree index and a
   `tsvector` index cannot serve a substring at all. Matching therefore goes
@@ -230,7 +239,7 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Testing
 
-**API tests** — 108 Vitest + Supertest tests with the database mocked, covering
+**API tests** — 112 Vitest + Supertest tests with the database mocked, covering
 auth middleware, registration/login (including the email-enumeration defense
 and email-format validation, which login deliberately skips so accounts
 predating the rule can still sign in), pagination caps and sort-column

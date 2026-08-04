@@ -19,10 +19,10 @@ COPY . .
 ARG NEXT_PUBLIC_EXCHANGE_RATE_API=https://api.frankfurter.app/latest?from=USD
 ENV NEXT_PUBLIC_EXCHANGE_RATE_API=$NEXT_PUBLIC_EXCHANGE_RATE_API \
     NEXT_TELEMETRY_DISABLED=1
-# DATABASE_URL is only read at request time, but the build imports the server
-# modules, so give it a placeholder that is never connected to.
-ENV DATABASE_URL=postgres://build:build@localhost:5432/build \
-    JWT_SECRET=build-time-placeholder-value-32-characters
+# No DATABASE_URL or JWT_SECRET here. The build imports the server modules to
+# collect page data, but the pg Pool is now built on first use rather than on
+# import (server/db/index.ts), so nothing needs a connection string until a
+# request actually arrives.
 RUN npm run build
 
 # ---- runtime: standalone server only, run as non-root ----
