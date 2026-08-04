@@ -37,15 +37,8 @@ CREATE TABLE IF NOT EXISTS products (
   category    VARCHAR(100) NOT NULL,
   stock       INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
   image_url   TEXT,
-  barcode     VARCHAR(64) UNIQUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- Upgrade path for databases created before the companion app's barcode
--- scanner. Idempotent so re-running this file is always safe.
-ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode VARCHAR(64);
-ALTER TABLE products DROP CONSTRAINT IF EXISTS products_barcode_key;
-ALTER TABLE products ADD CONSTRAINT products_barcode_key UNIQUE (barcode);
 
 -- Orders: total_amount/currency describe the order as a whole.
 -- We never join order_items back to products.price for historical totals -
@@ -147,16 +140,6 @@ CREATE TABLE IF NOT EXISTS winback_emails (
 );
 
 CREATE INDEX IF NOT EXISTS idx_winback_emails_user_id ON winback_emails(user_id);
-
--- Companion app (mobile) push registrations. One row per device; re-registering
--- the same token (reinstall, token rotation) upserts via ON CONFLICT (token)
--- rather than accumulating duplicates.
-CREATE TABLE IF NOT EXISTS device_tokens (
-  id         SERIAL PRIMARY KEY,
-  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token      VARCHAR(200) NOT NULL UNIQUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
 CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
