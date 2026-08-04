@@ -8,10 +8,14 @@ vi.mock('../server/mail', () => ({
   sendOrderConfirmation: vi.fn(async () => true),
   sendOrderShipped: vi.fn(async () => true),
 }));
+vi.mock('../server/push', () => ({
+  notifyAdminsNewOrder: vi.fn(async () => undefined),
+}));
 
 import { pool } from '../server/db';
 import { createApp } from '../server/app';
 import { ALLOWED_TRANSITIONS } from '../server/orderStatus';
+import { notifyAdminsNewOrder } from '../server/push';
 import type { OrderStatus } from '../server/types';
 import { tokenFor } from './helpers';
 
@@ -159,6 +163,9 @@ describe('POST /api/orders (checkout)', () => {
     const stockUpdate = txCall('UPDATE products SET stock = stock - $1')!;
     expect(stockUpdate[1]).toEqual([2, 7]);
     expect(txCall('COMMIT')).toBeDefined();
+
+    // Fire-and-forget push to admin devices, same contract as the email above.
+    expect(notifyAdminsNewOrder).toHaveBeenCalledWith(res.body);
   });
 });
 

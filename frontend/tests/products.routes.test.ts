@@ -14,7 +14,13 @@ import { SEARCH_VECTOR } from '../server/queries/products';
 import { tokenFor } from './helpers';
 
 const poolQuery = pool.query as unknown as ReturnType<typeof vi.fn>;
+const poolConnect = pool.connect as unknown as ReturnType<typeof vi.fn>;
 const app = createApp();
+
+// POST/PUT run inside a transaction (pool.connect(), not pool.query), so
+// create/update tests drive this client mock instead of poolQuery.
+const clientQuery = vi.fn();
+const client = { query: clientQuery, release: vi.fn() };
 
 /** Makes pool.query answer the COUNT query and the data query for GET /api/products. */
 function primeList(total: number, rows: unknown[] = []) {
@@ -26,6 +32,8 @@ function primeList(total: number, rows: unknown[] = []) {
 beforeEach(() => {
   vi.clearAllMocks();
   poolQuery.mockResolvedValue({ rows: [] });
+  clientQuery.mockResolvedValue({ rows: [] });
+  poolConnect.mockResolvedValue(client);
 });
 
 describe('GET /api/products (pagination)', () => {
@@ -252,6 +260,109 @@ describe('product write endpoints (admin-gated validation)', () => {
     expect(fractional.status).toBe(400);
     expect(negative.body.error).toBe('stock must be a non-negative whole number');
     expect(poolQuery).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/products/barcode/:code', () => {
+  it('returns the product for a known barcode', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ id: 7, name: 'Mug', barcode: '4800001234567' }] });
+
+    const res = await request(app)
+      .get('/api/products/barcode/4800001234567')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(7);
+    expect(poolQuery.mock.calls[0][0]).toContain('barcode = $1');
+    expect(poolQuery.mock.calls[0][1]).toEqual(['4800001234567']);
+  });
+
+  it('404s for an unknown barcode', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app)
+      .get('/api/products/barcode/0000000000000')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects non-admin users', async () => {
+    const res = await request(app)
+      .get('/api/products/barcode/4800001234567')
+      .set('Authorization', `Bearer ${tokenFor(2, 'customer')}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  it('400s on an overlong code', async () => {
+    const res = await request(app)
+      .get(`/api/products/barcode/${'9'.repeat(65)}`)
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('product barcode on create/update', () => {
+  const admin = () => `Bearer ${tokenFor(1, 'admin')}`;
+  const base = { name: 'Mug', price: 9.5, category: 'Kitchen' };
+
+  it('passes barcode through on create', async () => {
+    clientQuery.mockImplementation(async (sql: string) =>
+      sql.includes('INSERT INTO products') ? { rows: [{ id: 1, ...base, barcode: '123' }] } : { rows: [] }
+    );
+
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', admin())
+      .send({ ...base, barcode: ' 123 ' });
+
+    expect(res.status).toBe(201);
+    const insertCall = clientQuery.mock.calls.find(([sql]) => (sql as string).includes('INSERT INTO products'))!;
+    expect(insertCall[0]).toContain('barcode');
+    expect(insertCall[1]).toContain('123'); // trimmed
+  });
+
+  it('409s when the barcode is already taken (create)', async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('INSERT INTO products')) {
+        throw Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'products_barcode_key' });
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', admin())
+      .send({ ...base, barcode: '123' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('409s when the barcode is already taken (update)', async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('UPDATE products')) {
+        throw Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'products_barcode_key' });
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ barcode: '123' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects a non-string barcode', async () => {
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', admin())
+      .send({ ...base, barcode: 42 });
+
+    expect(res.status).toBe(400);
   });
 });
 

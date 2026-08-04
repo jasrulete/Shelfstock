@@ -47,10 +47,16 @@ function parseId(raw: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
+// pg raises 23505 on unique violations; the constraint name tells us which
+// column so other unique constraints keep their own error handling.
+function isBarcodeConflict(err: any): boolean {
+  return err?.code === '23505' && String(err?.constraint ?? '').includes('barcode');
+}
+
 // Shared field validation for create/update. Returns an error message or
 // null. For updates, missing (undefined) fields are allowed and left as-is.
 function validateProductFields(body: any, requireAll: boolean): string | null {
-  const { name, description, price, category, stock, image_url } = body ?? {};
+  const { name, description, price, category, stock, image_url, barcode } = body ?? {};
 
   if (requireAll && (name === undefined || price === undefined || category === undefined)) {
     return 'name, price, and category are required';
@@ -72,6 +78,9 @@ function validateProductFields(body: any, requireAll: boolean): string | null {
   }
   if (image_url !== undefined && image_url !== null && typeof image_url !== 'string') {
     return 'image_url must be a string';
+  }
+  if (barcode !== undefined && barcode !== null && (typeof barcode !== 'string' || !barcode.trim() || barcode.trim().length > 64)) {
+    return 'barcode must be a non-empty string (max 64 chars)';
   }
   if (body?.images !== undefined) {
     if (!Array.isArray(body.images) || body.images.some((u: unknown) => typeof u !== 'string')) {
@@ -180,6 +189,27 @@ router.get('/:id/related', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/products/barcode/:code - admin lookup used by the companion
+ * app's scanner. Registered before '/:id' so the literal path wins.
+ */
+router.get('/barcode/:code', requireAuth, adminOnly, async (req, res) => {
+  const code = req.params.code.trim();
+  if (!code || code.length > 64) {
+    return res.status(400).json({ error: 'Invalid barcode' });
+  }
+  try {
+    const result = await pool.query('SELECT * FROM products WHERE barcode = $1', [code]);
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'No product with this barcode' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Barcode lookup error:', err);
+    res.status(500).json({ error: 'Failed to look up barcode' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (id === null) {
@@ -204,16 +234,16 @@ router.post('/', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url, images } = req.body;
+  const { name, description, price, category, stock, image_url, images, barcode } = req.body;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await client.query(
-      `INSERT INTO products (name, description, price, category, stock, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO products (name, description, price, category, stock, image_url, barcode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [name.trim(), description ?? null, price, category.trim(), stock ?? 0, image_url || null]
+      [name.trim(), description ?? null, price, category.trim(), stock ?? 0, image_url || null, barcode ? barcode.trim() : null]
     );
     if (Array.isArray(images)) {
       await replaceGallery(client, result.rows[0].id, images);
@@ -222,6 +252,9 @@ router.post('/', requireAuth, adminOnly, async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
+    if (isBarcodeConflict(err)) {
+      return res.status(409).json({ error: 'A product with this barcode already exists' });
+    }
     console.error('Create product error:', err);
     res.status(500).json({ error: 'Failed to create product' });
   } finally {
@@ -240,7 +273,7 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url, images } = req.body ?? {};
+  const { name, description, price, category, stock, image_url, images, barcode } = req.body ?? {};
 
   const client = await pool.connect();
   try {
@@ -252,10 +285,11 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
            price = COALESCE($3, price),
            category = COALESCE($4, category),
            stock = COALESCE($5, stock),
-           image_url = COALESCE($6, image_url)
-       WHERE id = $7
+           image_url = COALESCE($6, image_url),
+           barcode = COALESCE($7, barcode)
+       WHERE id = $8
        RETURNING *`,
-      [name, description, price, category, stock, image_url, id]
+      [name, description, price, category, stock, image_url, barcode === undefined ? null : (barcode ? barcode.trim() : null), id]
     );
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -270,6 +304,9 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
+    if (isBarcodeConflict(err)) {
+      return res.status(409).json({ error: 'A product with this barcode already exists' });
+    }
     console.error('Update product error:', err);
     res.status(500).json({ error: 'Failed to update product' });
   } finally {

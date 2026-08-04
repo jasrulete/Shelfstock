@@ -187,7 +187,7 @@ export async function listProducts(
   values.push(limitNum, offset);
   const dataResult = await pool.query(
     `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
-              p.created_at,
+              p.barcode, p.created_at,
               ${RATING_COLUMNS}
        FROM products p
        ${RATING_JOIN}
