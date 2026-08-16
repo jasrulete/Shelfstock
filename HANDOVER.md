@@ -322,6 +322,42 @@ Full stack in Docker: `docker compose up -d --wait --build` →
 http://localhost:3000. That path needs no separate step - compose runs a
 one-shot `migrate` service before `web` starts.
 
+### Running two conversations at once — give each its own worktree
+
+**One working tree cannot be shared by two agent sessions.** This was learned
+the hard way, twice in one day: a batch of uncommitted work appeared in a
+session that had not written it, and later a branch was switched out from under
+a running command, so a `git pull` landed on somebody else's feature branch. The
+failure mode is silent — if both sessions write the same file, one just wins.
+
+The convention: **the main tree belongs to whoever is already in it.** Every
+additional conversation gets its own worktree.
+
+```bash
+git worktree add .claude/worktrees/<name> -b <branch> origin/main
+```
+
+Three things worth knowing before you do:
+
+- **Each worktree needs its own `npm install`.** `node_modules` is not shared,
+  which costs a few minutes and a few hundred MB per worktree. Skip it entirely
+  if the work is documentation only.
+- **`.env.local` is per-worktree too**, because it is gitignored. Copy it across
+  or recreate it from `.env.example`.
+- **Removing one on Windows is not simply `git worktree remove`.** That fails
+  with `Filename too long` on deep `node_modules` paths, leaving the worktree
+  deregistered but still on disk. Clear the contents first with a robocopy
+  mirror from an empty directory, then delete:
+
+  ```bash
+  robocopy "$env:TEMP\empty" ".claude\worktrees\<name>" /MIR
+  git worktree remove --force ".claude\worktrees\<name>"
+  git worktree prune
+  ```
+
+  A folder that will not delete even when empty is usually still some process's
+  working directory - including the agent session that is trying to delete it.
+
 ---
 
 ## 6. Next steps, in the order I'd do them
