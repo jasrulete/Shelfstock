@@ -65,6 +65,31 @@ export function sendWinback(to: string, name: string | null, storeUrl: string): 
   return sendEmail(to, 'We miss you at ShelfStock', html);
 }
 
+/**
+ * The reset link is the whole secret, so this mail deliberately says nothing
+ * else: no name, no order history, nothing that would be worth reading if it
+ * reached the wrong inbox.
+ *
+ * It also states the expiry, because "why didn't the link work" is otherwise
+ * the most common support question a reset flow produces.
+ */
+export function sendPasswordReset(to: string, link: string, minutes: number): Promise<boolean> {
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px">
+      <h2>Reset your password</h2>
+      <p>Someone asked to reset the password for this ShelfStock account. If that
+      was you, use the button below. The link works once and expires in
+      ${minutes} minutes.</p>
+      <p><a href="${esc(link)}" style="display:inline-block;background:#2563eb;color:#fff;
+      padding:10px 18px;border-radius:6px;text-decoration:none">Choose a new password</a></p>
+      <p style="color:#555">If it wasn't you, ignore this email - nothing has changed
+      and your current password still works.</p>
+      <p style="color:#999;font-size:12px">ShelfStock</p>
+    </div>`;
+
+  return sendEmail(to, 'Reset your ShelfStock password', html);
+}
+
 export function sendOrderConfirmation(
   to: string,
   order: OrderEmailData,

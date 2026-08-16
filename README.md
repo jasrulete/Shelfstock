@@ -144,6 +144,10 @@ docker compose down        # stops containers; keeps the database volume
   them back on the shelf would make the listing disagree with the shelf.
 - **Admin** — sales dashboard (revenue over time, top products), product
   CRUD (`/admin/products`), and order fulfillment (`/admin/orders`).
+- **Password reset** — emailed single-use link, valid for an hour. The token
+  is stored only as a SHA-256 hash, so a database dump cannot be replayed into
+  an account takeover, and `/forgot-password` answers identically whether or
+  not the address is registered so it cannot be used to test who shops here.
 - **Security** — bcrypt password hashing, JWT auth with row-level ownership
   checks, helmet security headers, rate limiting (tight on auth endpoints),
   request body size limits, input validation on every write endpoint.
@@ -425,6 +429,8 @@ bundle that can outlive the server it points at.
 | --------------- | ---------------------------------- | ---------------- |
 | POST            | `/api/auth/register`               | –                |
 | POST            | `/api/auth/login`                  | –                |
+| POST            | `/api/auth/forgot-password`        | –                |
+| POST            | `/api/auth/reset-password`         | –                |
 | GET             | `/api/products`                    | –                |
 | GET             | `/api/products/low-stock`          | –                |
 | GET             | `/api/products/:id`                | –                |

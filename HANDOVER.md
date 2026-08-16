@@ -1,6 +1,6 @@
 # ShelfStock — Session Handover
 
-Written 2026-08-03, last updated 2026-08-04. Point a new conversation at this
+Written 2026-08-03, last updated 2026-08-17. Point a new conversation at this
 file to pick up where the last one left off.
 
 ---
@@ -18,8 +18,8 @@ works and looks considered", not for scale.
 |---|---|
 | Live | https://shelfstock-jer2x.vercel.app |
 | Repo | https://github.com/jasrulete/Shelfstock |
-| `main` at handover | `e87575e` |
-| Tests | 165 on `main` (127 API on Node + 38 component on a DOM) |
+| `main` at handover | `1319fb6` |
+| Tests | 177 (139 API on Node + 38 component on a DOM) |
 | Stack | Next.js 15.5.22 · React 18.3.1 · Express · PostgreSQL (Neon) |
 
 **Demo logins** (seeded, safe to share):
@@ -48,7 +48,7 @@ frontend/                  ← the entire app; Vercel root directory
     routes/                7 routers: products, orders, auth, categories,
                            customers, analytics, reviews
     db/index.ts            pg Pool, built on FIRST USE (proxy), not on import
-  tests/                   14 vitest files, 165 tests (two Vitest projects:
+  tests/                   15 vitest files, 177 tests (two Vitest projects:
                            *.test.ts on Node, *.test.tsx on a DOM)
   migrations/              ordered SQL migrations (node-pg-migrate)
   scripts/                 create-admin, seed-demo-users, e2e-smoke
@@ -195,6 +195,22 @@ asserted. In order:
   1039ms sequentially scanning** the same predicate. A test asserts the query's
   full-text expression is byte-identical to the one the migrations index,
   because a one-space drift silently reverts it to a sequential scan.
+- **Password reset added.** `POST /api/auth/forgot-password` and
+  `/reset-password`, plus the two pages. Tokens are 32 bytes of CSPRNG output
+  stored as a SHA-256 hash - never the raw value - single use, one hour, and
+  issuing one retires that user's outstanding tokens. `forgot-password` returns
+  the same 200 and the same body for a registered and an unregistered address,
+  and `reset-password` gives one message for unknown, expired and already-used
+  alike, so neither becomes an oracle. **Known gap, deliberate:** existing JWTs
+  are NOT invalidated, so a stolen session survives a reset for up to its 7-day
+  life. Fixing it means a database read on every authenticated request, turning
+  auth from stateless to stateful; that trade was taken knowingly and is
+  recorded in the route's comment too. **Email does not actually send** -
+  RESEND_API_KEY is unset in every environment, so this shares the same fate as
+  order confirmations. In non-production the link is logged to the console so
+  the flow is testable by hand. The E2E smoke test proves the whole flow against
+  real Postgres: identical answers for known/unknown, the password genuinely
+  changes, the old one stops working, and a replayed token is refused.
 - **Registration validates the email format.** `typeof email === 'string'` was
   the only check, so `"asdf"` registered and every order mail to it bounced
   forever. Now checked against the *normalized* address: one `@`, something
@@ -309,7 +325,7 @@ npm install
 cp .env.example .env.local              # then set DATABASE_URL + JWT_SECRET
 npm run migrate:up                      # REQUIRED - the db starts empty
 npm run dev                             # app AND api on :3000
-npm test                                # 165 tests
+npm test                                # 177 tests
 npm run lint
 ```
 

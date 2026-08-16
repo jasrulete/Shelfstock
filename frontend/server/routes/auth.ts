@@ -1,7 +1,10 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db';
+import { sendPasswordReset } from '../mail';
+import { siteUrl } from '@/lib/siteUrl';
 import { PublicUser, User } from '../types';
 
 const router = Router();
@@ -123,6 +126,130 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Failed to log in' });
+  }
+});
+
+// How long a reset link stays usable. Long enough to survive a slow inbox,
+// short enough that a link sitting in a mailbox is not a standing key.
+const RESET_TTL_MINUTES = 60;
+
+/** SHA-256, not bcrypt: this is 32 bytes of CSPRNG output rather than a
+ *  human-chosen secret, so there is nothing to slow an attacker down for. */
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * POST /api/auth/forgot-password
+ *
+ * Always answers 200 with the same body, whether or not the address is
+ * registered. Anything else turns this into a free "is this person a customer"
+ * lookup - the same reasoning that makes login return one message for both a
+ * bad password and an unknown user.
+ *
+ * Rate limiting comes from the limiter mounted on /api/auth in app.ts.
+ */
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body ?? {};
+  if (typeof email !== 'string') {
+    return res.status(400).json({ error: 'email is required' });
+  }
+
+  // Deliberately identical for every outcome below.
+  const answer = {
+    message: 'If that email has an account, a reset link is on its way.',
+  };
+
+  try {
+    const found = await pool.query<User>('SELECT * FROM users WHERE email = $1', [
+      email.trim().toLowerCase(),
+    ]);
+    const user = found.rows[0];
+    if (!user) {
+      return res.json(answer);
+    }
+
+    // Issuing a new link retires any earlier one, so a forwarded or shoulder
+    // surfed old email stops working the moment the real owner asks again.
+    await pool.query(
+      `UPDATE password_resets SET used_at = now()
+       WHERE user_id = $1 AND used_at IS NULL`,
+      [user.id]
+    );
+
+    const token = crypto.randomBytes(32).toString('base64url');
+    await pool.query(
+      `INSERT INTO password_resets (user_id, token_hash, expires_at)
+       VALUES ($1, $2, now() + ($3 || ' minutes')::interval)`,
+      [user.id, hashToken(token), String(RESET_TTL_MINUTES)]
+    );
+
+    const link = `${siteUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+    // Local development has no RESEND_API_KEY, so the mail is a silent no-op
+    // and the flow would be untestable by hand. Never in production.
+    if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== 'production') {
+      console.log(`[dev] password reset link for ${user.email}: ${link}`);
+    }
+
+    await sendPasswordReset(user.email, link, RESET_TTL_MINUTES);
+    res.json(answer);
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    // Still the same answer: an error here must not be distinguishable either.
+    res.json(answer);
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ *
+ * The token is looked up by hash - the raw value never touches the database,
+ * so a leaked dump cannot be replayed into an account takeover.
+ *
+ * Note: this does NOT invalidate sessions that already exist. JWTs here are
+ * stateless with a 7-day life and no revocation list, so someone holding a
+ * stolen token keeps it until it expires. Fixing that means a database read on
+ * every authenticated request, which is a deliberate non-goal for now - it is
+ * recorded in HANDOVER rather than left to be discovered.
+ */
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body ?? {};
+
+  if (typeof token !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'token and password are required' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  // One message for unknown, expired and already-used alike. Telling them
+  // apart would confirm that a token once existed.
+  const invalid = { error: 'This reset link is invalid or has expired' };
+
+  try {
+    const found = await pool.query(
+      `SELECT id, user_id, expires_at, used_at
+       FROM password_resets WHERE token_hash = $1`,
+      [hashToken(token)]
+    );
+    const reset = found.rows[0];
+
+    if (!reset || reset.used_at || new Date(reset.expires_at).getTime() <= Date.now()) {
+      return res.status(400).json(invalid);
+    }
+
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+      passwordHash,
+      reset.user_id,
+    ]);
+    await pool.query('UPDATE password_resets SET used_at = now() WHERE id = $1', [reset.id]);
+
+    res.json({ message: 'Your password has been changed. You can sign in with it now.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
