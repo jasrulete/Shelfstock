@@ -390,9 +390,27 @@ describe('PUT /api/products/:id clearing nullable fields', () => {
     expect(res.status).toBe(200);
     const [sql, params] = updateCall();
     expect(sql).toContain('barcode = CASE WHEN');
-    // Last param before id is the WHERE id value; barcode value param should be null.
-    expect(params[params.length - 2]).toBe(null);
+    expect(params[8]).toBe(true); // hasBarcode
+    expect(params[9]).toBe(null); // barcode value
+    expect(params[10]).toBe(5); // id
   });
+
+  // Param layout of the UPDATE, by index - kept in one place so each
+  // assertion below fails if a value lands in the wrong slot rather than
+  // merely being present somewhere in the array.
+  const IDX = {
+    name: 0,
+    hasDescription: 1,
+    description: 2,
+    price: 3,
+    category: 4,
+    stock: 5,
+    hasImageUrl: 6,
+    imageUrl: 7,
+    hasBarcode: 8,
+    barcode: 9,
+    id: 10,
+  } as const;
 
   it('sets description to NULL when explicitly cleared', async () => {
     primeUpdate();
@@ -405,7 +423,9 @@ describe('PUT /api/products/:id clearing nullable fields', () => {
     expect(res.status).toBe(200);
     const [sql, params] = updateCall();
     expect(sql).toContain('description = CASE WHEN');
-    expect(params).toContain(null);
+    expect(params[IDX.hasDescription]).toBe(true);
+    expect(params[IDX.description]).toBe(null);
+    expect(params[IDX.id]).toBe(5);
   });
 
   it('sets image_url to NULL when explicitly cleared', async () => {
@@ -419,6 +439,9 @@ describe('PUT /api/products/:id clearing nullable fields', () => {
     expect(res.status).toBe(200);
     const [sql, params] = updateCall();
     expect(sql).toContain('image_url = CASE WHEN');
+    expect(params[IDX.hasImageUrl]).toBe(true);
+    expect(params[IDX.imageUrl]).toBe(null);
+    expect(params[IDX.id]).toBe(5);
   });
 
   it('leaves barcode, description, and image_url unchanged when omitted', async () => {
@@ -431,8 +454,13 @@ describe('PUT /api/products/:id clearing nullable fields', () => {
 
     expect(res.status).toBe(200);
     const [, params] = updateCall();
-    // None of the "present" flags for the nullable columns should be true.
-    expect(params).not.toContain(true);
+    expect(params[IDX.hasDescription]).toBe(false);
+    expect(params[IDX.description]).toBe(null);
+    expect(params[IDX.hasImageUrl]).toBe(false);
+    expect(params[IDX.imageUrl]).toBe(null);
+    expect(params[IDX.hasBarcode]).toBe(false);
+    expect(params[IDX.barcode]).toBe(null);
+    expect(params[IDX.price]).toBe(12);
   });
 
   it('still sets a real value when one is provided', async () => {
@@ -445,9 +473,12 @@ describe('PUT /api/products/:id clearing nullable fields', () => {
 
     expect(res.status).toBe(200);
     const [, params] = updateCall();
-    expect(params).toContain('New description');
-    expect(params).toContain('https://example.com/a.png');
-    expect(params).toContain('999'); // trimmed
+    expect(params[IDX.hasDescription]).toBe(true);
+    expect(params[IDX.description]).toBe('New description');
+    expect(params[IDX.hasImageUrl]).toBe(true);
+    expect(params[IDX.imageUrl]).toBe('https://example.com/a.png');
+    expect(params[IDX.hasBarcode]).toBe(true);
+    expect(params[IDX.barcode]).toBe('999'); // trimmed
   });
 });
 
