@@ -56,6 +56,13 @@ function LoginForm() {
   return (
     <div className="mx-auto max-w-sm">
       <h1 className="mb-4 text-2xl font-bold">Log in</h1>
+      {/* Set by /reset-password on success, so the redirect explains itself
+          rather than dropping the user on a bare login form. */}
+      {searchParams?.get("reset") === "1" && (
+        <p role="status" className="mb-4 rounded border border-brand-200 bg-brand-50 p-3 text-sm text-brand-800">
+          Your password has been changed. Sign in with it below.
+        </p>
+      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
           label="Email"
@@ -83,6 +90,11 @@ function LoginForm() {
         </Button>
       </form>
       <p className="mt-3 text-sm text-gray-500">
+        <Link href="/forgot-password" className="text-brand-600 underline">
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="mt-1 text-sm text-gray-500">
         No account?{" "}
         <Link href="/register" className="text-brand-600 underline">
           Sign up

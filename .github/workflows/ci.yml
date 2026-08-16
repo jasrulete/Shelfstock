@@ -71,6 +71,10 @@ jobs:
           # Same origin as the app now - there is no separate API port.
           API_URL: http://localhost:3000/api
           PROMOTE_CMD: docker compose exec -T db psql -U postgres -d shelfstock -c "UPDATE users SET role='admin' WHERE email='{EMAIL}'"
+          # The password-reset checks need to read and seed the database
+          # directly: the raw reset token only ever exists in the email, by
+          # design, so the test plants a known one rather than recovering it.
+          SQL_CMD: docker compose exec -T db psql -U postgres -d shelfstock -t -A -c "{SQL}"
 
       - name: App logs on failure
         if: failure()
