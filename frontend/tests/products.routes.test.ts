@@ -366,6 +366,122 @@ describe('product barcode on create/update', () => {
   });
 });
 
+describe('PUT /api/products/:id clearing nullable fields', () => {
+  const admin = () => `Bearer ${tokenFor(1, 'admin')}`;
+
+  function primeUpdate(row: Record<string, unknown> = { id: 5 }) {
+    clientQuery.mockImplementation(async (sql: string) =>
+      sql.includes('UPDATE products') ? { rows: [row] } : { rows: [] }
+    );
+  }
+
+  function updateCall() {
+    return clientQuery.mock.calls.find(([sql]) => (sql as string).includes('UPDATE products'))!;
+  }
+
+  it('sets barcode to NULL when explicitly cleared', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ barcode: null });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = updateCall();
+    expect(sql).toContain('barcode = CASE WHEN');
+    expect(params[8]).toBe(true); // hasBarcode
+    expect(params[9]).toBe(null); // barcode value
+    expect(params[10]).toBe(5); // id
+  });
+
+  // Param layout of the UPDATE, by index - kept in one place so each
+  // assertion below fails if a value lands in the wrong slot rather than
+  // merely being present somewhere in the array.
+  const IDX = {
+    name: 0,
+    hasDescription: 1,
+    description: 2,
+    price: 3,
+    category: 4,
+    stock: 5,
+    hasImageUrl: 6,
+    imageUrl: 7,
+    hasBarcode: 8,
+    barcode: 9,
+    id: 10,
+  } as const;
+
+  it('sets description to NULL when explicitly cleared', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ description: null });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = updateCall();
+    expect(sql).toContain('description = CASE WHEN');
+    expect(params[IDX.hasDescription]).toBe(true);
+    expect(params[IDX.description]).toBe(null);
+    expect(params[IDX.id]).toBe(5);
+  });
+
+  it('sets image_url to NULL when explicitly cleared', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ image_url: null });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = updateCall();
+    expect(sql).toContain('image_url = CASE WHEN');
+    expect(params[IDX.hasImageUrl]).toBe(true);
+    expect(params[IDX.imageUrl]).toBe(null);
+    expect(params[IDX.id]).toBe(5);
+  });
+
+  it('leaves barcode, description, and image_url unchanged when omitted', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ price: 12 });
+
+    expect(res.status).toBe(200);
+    const [, params] = updateCall();
+    expect(params[IDX.hasDescription]).toBe(false);
+    expect(params[IDX.description]).toBe(null);
+    expect(params[IDX.hasImageUrl]).toBe(false);
+    expect(params[IDX.imageUrl]).toBe(null);
+    expect(params[IDX.hasBarcode]).toBe(false);
+    expect(params[IDX.barcode]).toBe(null);
+    expect(params[IDX.price]).toBe(12);
+  });
+
+  it('still sets a real value when one is provided', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ description: 'New description', image_url: 'https://example.com/a.png', barcode: ' 999 ' });
+
+    expect(res.status).toBe(200);
+    const [, params] = updateCall();
+    expect(params[IDX.hasDescription]).toBe(true);
+    expect(params[IDX.description]).toBe('New description');
+    expect(params[IDX.hasImageUrl]).toBe(true);
+    expect(params[IDX.imageUrl]).toBe('https://example.com/a.png');
+    expect(params[IDX.hasBarcode]).toBe(true);
+    expect(params[IDX.barcode]).toBe('999'); // trimmed
+  });
+});
+
 describe('GET /api/products/low-stock (public storefront rail)', () => {
   it('excludes sold-out products and orders by scarcity', async () => {
     poolQuery.mockResolvedValue({ rows: [{ id: 2, name: 'Keyboard', stock: 3 }] });

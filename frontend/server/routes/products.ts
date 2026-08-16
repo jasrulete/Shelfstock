@@ -273,7 +273,16 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: validationError });
   }
 
-  const { name, description, price, category, stock, image_url, images, barcode } = req.body ?? {};
+  const body = req.body ?? {};
+  const { name, description, price, category, stock, image_url, images, barcode } = body;
+
+  // description, image_url, and barcode are nullable columns, so "key absent"
+  // and "key present with null" must be distinguishable - COALESCE alone
+  // can't tell them apart. A CASE WHEN driven by presence lets an explicit
+  // null through while an omitted key still leaves the column untouched.
+  const hasDescription = Object.prototype.hasOwnProperty.call(body, 'description');
+  const hasImageUrl = Object.prototype.hasOwnProperty.call(body, 'image_url');
+  const hasBarcode = Object.prototype.hasOwnProperty.call(body, 'barcode');
 
   const client = await pool.connect();
   try {
@@ -281,15 +290,27 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     const result = await client.query(
       `UPDATE products
        SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           price = COALESCE($3, price),
-           category = COALESCE($4, category),
-           stock = COALESCE($5, stock),
-           image_url = COALESCE($6, image_url),
-           barcode = COALESCE($7, barcode)
-       WHERE id = $8
+           description = CASE WHEN $2 THEN $3 ELSE description END,
+           price = COALESCE($4, price),
+           category = COALESCE($5, category),
+           stock = COALESCE($6, stock),
+           image_url = CASE WHEN $7 THEN $8 ELSE image_url END,
+           barcode = CASE WHEN $9 THEN $10 ELSE barcode END
+       WHERE id = $11
        RETURNING *`,
-      [name, description, price, category, stock, image_url, barcode === undefined ? null : (barcode ? barcode.trim() : null), id]
+      [
+        name,
+        hasDescription,
+        hasDescription ? description : null,
+        price,
+        category,
+        stock,
+        hasImageUrl,
+        hasImageUrl ? image_url : null,
+        hasBarcode,
+        hasBarcode ? (barcode ? barcode.trim() : null) : null,
+        id,
+      ]
     );
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
