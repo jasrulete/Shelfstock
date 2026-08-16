@@ -17,8 +17,9 @@
     "create-admin": "node scripts/create-admin.js",
     "seed-demo-users": "node scripts/seed-demo-users.js"
   },
-  "_comment_overrides": "Two transitive pins that next controls but we carry the risk for. postcss: next pins it exactly and that pin has landed inside a vulnerable range (GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849, sourceMappingURL path traversal). sharp: next declares ^0.34.3, which cannot reach the patched 0.35.x on its own because a caret does not cross a 0.x minor; <0.35.0 carries the libvips CVEs (CVE-2026-33327/33328/35590/35591). npm's own advice was to downgrade to next@14, which would reintroduce the far larger set of Next advisories. Drop each override once next depends on a patched version itself.",
+  "_comment_overrides": "Three transitive pins that next controls but we carry the risk for. nanoid: next pins postcss exactly, and that postcss pulls nanoid <3.3.17, which carries GHSA-2v37-7h3g-55p8 (custom generators loop forever when size is zero). The advisory was published after the postcss pin, so overriding postcss alone does not reach it. postcss: next pins it exactly and that pin has landed inside a vulnerable range (GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849, sourceMappingURL path traversal). sharp: next declares ^0.34.3, which cannot reach the patched 0.35.x on its own because a caret does not cross a 0.x minor; <0.35.0 carries the libvips CVEs (CVE-2026-33327/33328/35590/35591). npm's own advice was to downgrade to next@14, which would reintroduce the far larger set of Next advisories. Drop each override once next depends on a patched version itself.",
   "overrides": {
+    "nanoid": "^3.3.17",
     "postcss": "^8.5.25",
     "sharp": "^0.35.3"
   },
