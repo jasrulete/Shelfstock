@@ -366,6 +366,91 @@ describe('product barcode on create/update', () => {
   });
 });
 
+describe('PUT /api/products/:id clearing nullable fields', () => {
+  const admin = () => `Bearer ${tokenFor(1, 'admin')}`;
+
+  function primeUpdate(row: Record<string, unknown> = { id: 5 }) {
+    clientQuery.mockImplementation(async (sql: string) =>
+      sql.includes('UPDATE products') ? { rows: [row] } : { rows: [] }
+    );
+  }
+
+  function updateCall() {
+    return clientQuery.mock.calls.find(([sql]) => (sql as string).includes('UPDATE products'))!;
+  }
+
+  it('sets barcode to NULL when explicitly cleared', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ barcode: null });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = updateCall();
+    expect(sql).toContain('barcode = CASE WHEN');
+    // Last param before id is the WHERE id value; barcode value param should be null.
+    expect(params[params.length - 2]).toBe(null);
+  });
+
+  it('sets description to NULL when explicitly cleared', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ description: null });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = updateCall();
+    expect(sql).toContain('description = CASE WHEN');
+    expect(params).toContain(null);
+  });
+
+  it('sets image_url to NULL when explicitly cleared', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ image_url: null });
+
+    expect(res.status).toBe(200);
+    const [sql, params] = updateCall();
+    expect(sql).toContain('image_url = CASE WHEN');
+  });
+
+  it('leaves barcode, description, and image_url unchanged when omitted', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ price: 12 });
+
+    expect(res.status).toBe(200);
+    const [, params] = updateCall();
+    // None of the "present" flags for the nullable columns should be true.
+    expect(params).not.toContain(true);
+  });
+
+  it('still sets a real value when one is provided', async () => {
+    primeUpdate();
+
+    const res = await request(app)
+      .put('/api/products/5')
+      .set('Authorization', admin())
+      .send({ description: 'New description', image_url: 'https://example.com/a.png', barcode: ' 999 ' });
+
+    expect(res.status).toBe(200);
+    const [, params] = updateCall();
+    expect(params).toContain('New description');
+    expect(params).toContain('https://example.com/a.png');
+    expect(params).toContain('999'); // trimmed
+  });
+});
+
 describe('GET /api/products/low-stock (public storefront rail)', () => {
   it('excludes sold-out products and orders by scarcity', async () => {
     poolQuery.mockResolvedValue({ rows: [{ id: 2, name: 'Keyboard', stock: 3 }] });
