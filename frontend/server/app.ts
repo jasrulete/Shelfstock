@@ -33,7 +33,16 @@ export function createApp() {
   // store (Upstash/Redis) would be the upgrade if this ever needs to be real.
   app.use(
     '/api',
-    rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false })
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 500,
+      standardHeaders: true,
+      legacyHeaders: false,
+      // An object, matching authLimiter below. A bare string here would be
+      // served as text/plain and break the same JSON contract the terminal
+      // error handler exists to keep.
+      message: { error: 'Too many requests, please try again later' },
+    })
   );
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -69,6 +78,34 @@ export function createApp() {
 
   // Centralized 404 for unmatched API routes
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
+  /**
+   * Terminal error handler. Registered last so it catches everything, and it
+   * has to exist: express.json() rejects a malformed or oversized body before
+   * any route runs, and without a 4-arg handler Express answers those with its
+   * default HTML page - while lib/api.ts and the companion's api/client.ts
+   * both read `error` off a JSON body on every non-2xx.
+   *
+   * Only the two body-parser failures get a specific message. Everything else
+   * gets a fixed string, because err.message from pg carries the table and
+   * column that failed and sometimes the bound parameter values; the real
+   * error goes to the server log instead.
+   */
+  // The unused `_next` is load-bearing: Express decides a middleware is an
+  // error handler by its arity, so dropping the fourth argument silently turns
+  // this back into ordinary middleware that never runs.
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (err?.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'Malformed JSON body' });
+    }
+    if (err?.type === 'entity.too.large') {
+      return res.status(413).json({ error: 'Request body too large' });
+    }
+
+    console.error('Unhandled API error:', err);
+    if (res.headersSent) return;
+    res.status(500).json({ error: 'Internal server error' });
+  });
 
   return app;
 }

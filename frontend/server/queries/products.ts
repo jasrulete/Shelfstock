@@ -187,7 +187,7 @@ export async function listProducts(
   values.push(limitNum, offset);
   const dataResult = await pool.query(
     `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
-              p.barcode, p.created_at,
+              p.created_at,
               ${RATING_COLUMNS}
        FROM products p
        ${RATING_JOIN}
@@ -213,7 +213,10 @@ export async function listProducts(
  * is malformed or unknown - callers turn both into the same 404 so a stranger
  * cannot tell a bad id from a missing one.
  */
-export async function getProductById(id: number): Promise<any | null> {
+export async function getProductById(
+  id: number,
+  { includeBarcode = false }: { includeBarcode?: boolean } = {}
+): Promise<any | null> {
   const result = await pool.query(
     `SELECT p.*, ${RATING_COLUMNS}
        FROM products p
@@ -223,6 +226,17 @@ export async function getProductById(id: number): Promise<any | null> {
   );
   if (result.rows.length === 0) return null;
   const product = result.rows[0];
+
+  // barcode is an internal stock-keeping code that exists only for the
+  // companion scanner, and `p.*` above hands it to whoever asked. Stripped
+  // here rather than by naming every other column, so a future migration
+  // cannot quietly re-widen this projection by adding a field.
+  //
+  // The companion's edit form seeds itself from this response
+  // (src/products/ProductForm.tsx), so an admin must still receive it - drop
+  // it for everyone and editing a product on the phone blanks the barcode and
+  // saves that blank back.
+  if (!includeBarcode) delete product.barcode;
 
   // The cover image leads the gallery, then the extra angles in order. Sent
   // as one ready-to-render array so the client isn't left stitching

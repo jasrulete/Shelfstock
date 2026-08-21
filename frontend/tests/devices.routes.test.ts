@@ -51,12 +51,16 @@ describe('POST /api/devices', () => {
 });
 
 describe('DELETE /api/devices/:token', () => {
-  it('deletes the token', async () => {
+  // Scoped to the caller's own row. Unscoped, any admin could unregister
+  // another admin's device just by presenting its token, which silently turns
+  // off someone else's order alerts.
+  it('deletes only the calling admin\'s copy of the token', async () => {
     const res = await request(app)
       .delete('/api/devices/ExponentPushToken%5Babc123%5D')
       .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
 
     expect(res.status).toBe(200);
-    expect(poolQuery.mock.calls[0][1]).toEqual(['ExponentPushToken[abc123]']);
+    expect(poolQuery.mock.calls[0][0]).toMatch(/user_id\s*=\s*\$2/);
+    expect(poolQuery.mock.calls[0][1]).toEqual(['ExponentPushToken[abc123]', 1]);
   });
 });

@@ -28,7 +28,13 @@ router.post('/', requireAuth, adminOnly, async (req, res) => {
 // DELETE /api/devices/:token - called on logout / notifications-off.
 router.delete('/:token', requireAuth, adminOnly, async (req, res) => {
   try {
-    await pool.query('DELETE FROM device_tokens WHERE token = $1', [req.params.token]);
+    // Scoped to the caller: without the user_id predicate any admin could
+    // unregister another admin's device by presenting its token, silently
+    // turning off someone else's order alerts.
+    await pool.query('DELETE FROM device_tokens WHERE token = $1 AND user_id = $2', [
+      req.params.token,
+      req.user!.userId,
+    ]);
     res.json({ ok: true });
   } catch (err) {
     console.error('Unregister device error:', err);
