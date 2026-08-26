@@ -1,5 +1,23 @@
 # ShelfStock — Session Handover
 
+> **This is a historical session log, not a specification.**
+>
+> The source of truth is **[`docs/`](docs/)**. Where this file overlaps with it,
+> `docs/` wins — and this file is no longer updated as the system changes.
+>
+> | Looking for | Read instead |
+> |---|---|
+> | Architecture, and the rules that must not be broken | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+> | The API contract | [docs/API.md](docs/API.md) |
+> | Deployment, env vars, runbook | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+> | Local setup, workflow, gotchas | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+> | Why something is the way it is | [docs/adr/](docs/adr/) |
+> | What is next | [docs/ROADMAP.md](docs/ROADMAP.md) |
+>
+> What is still worth reading here: **§3 and §3a**, the record of what was
+> built and how each claim was verified. That is history, and history does not
+> go stale.
+
 Written 2026-08-03, last updated 2026-08-17. Point a new conversation at this
 file to pick up where the last one left off.
 

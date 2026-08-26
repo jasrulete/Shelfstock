@@ -15,6 +15,10 @@ fulfillment.
 Express + TypeScript + PostgreSQL for the API, which runs inside the Next.js
 deployment as a serverless function. No paid services required.
 
+**📚 [Documentation](docs/)** — architecture and invariants, the API contract,
+data model, security posture, operations runbook, and the decision records.
+That directory is the source of truth; this README is the front door.
+
 ## 🐳 Run with Docker
 
 The fastest way to run the whole stack. The only prerequisite is
@@ -149,8 +153,13 @@ docker compose down        # stops containers; keeps the database volume
   an account takeover, and `/forgot-password` answers identically whether or
   not the address is registered so it cannot be used to test who shops here.
 - **Security** — bcrypt password hashing, JWT auth with row-level ownership
-  checks, helmet security headers, rate limiting (tight on auth endpoints),
-  request body size limits, input validation on every write endpoint.
+  checks, rate limiting (tight on auth endpoints), request body size limits,
+  and input validation on every write endpoint. Security headers come from two
+  places: `helmet` covers the API at `/api`, and `next.config.js` covers every
+  HTML page with `X-Frame-Options`, `nosniff`, `Referrer-Policy`, a
+  `Permissions-Policy` and a **report-only** CSP. Known weaknesses, each with
+  the control that compensates for it, are listed in
+  [docs/SECURITY.md](docs/SECURITY.md#3-known-weaknesses).
 
 ## Project layout
 
