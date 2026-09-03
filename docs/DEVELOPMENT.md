@@ -206,6 +206,8 @@ What is worth a test here:
   and `loading="lazy"` images are never requested — they sit at
   `complete: false` forever. Verify lazy-loading on an eager/`priority` image
   instead.
-- **`frontend/.git` is a second, stale repository** pointing at an archived
-  `Shelfstock-frontend` with a pre-serverless HEAD. Every workflow documented
-  against it starts by cloning the wrong thing. Deleting it is Roadmap §4.2.
+- **`frontend/` used to contain its own `.git`**, a second repository pointing
+  at the pre-serverless `Shelfstock-frontend` (HEAD `41b0eee`). It was deleted
+  on 2026-09-03 after confirming it held no unpushed commits and nothing the
+  monorepo lacks; that GitHub repo is archived. If a fresh clone ever shows two
+  repositories again, someone restored it — there is one repo, this one.
