@@ -72,7 +72,7 @@ frontend/                  ← the entire app; Vercel root directory
                            devices, analytics (+ reviews, nested under products)
     middleware/            auth (requireAuth, optionalAuth), adminOnly
   migrations/              ordered SQL migrations (node-pg-migrate)
-  tests/                   17 vitest files, 196 tests
+  tests/                   vitest, two projects — see DEVELOPMENT.md §7
   scripts/                 create-admin, seed-demo-users, e2e-smoke
 ```
 
@@ -219,6 +219,23 @@ every search to a sequential scan — measured at **1039ms vs 8.9ms** on 40k row
 
 *Enforced by:* `tests/products.routes.test.ts`, which asserts the emitted SQL
 contains the exported constant.
+
+### INV-13 — Every change to `products.stock` writes a ledger row in the same transaction
+
+Four paths move stock: the checkout decrement, the cancel restore, the admin
+product form, and `POST /api/products/:id/adjust-stock`. Each writes a
+`stock_adjustments` row through `recordStockAdjustment()` on the **same
+client, inside the same `BEGIN`/`COMMIT`** as its `UPDATE`. A row without its
+change, or a change without its row, is a bug.
+
+Two rules follow. **Clients move stock by delta, never by `PUT` of a computed
+value** — "read 12, send 13" swallows a concurrent order's decrement. And **the
+server rejects rather than clamps**: a −5 against a stock of 3 is a `409`, not
+a floor at 0 with a ledger row that claims −5.
+
+*Enforced by:* `tests/stockLedger.routes.test.ts`, plus one ledger test for
+each order path in `tests/orders.routes.test.ts`. *A fifth path that changes
+stock writes a row, or it does not merge.*
 
 ## 4. Four things that look odd until you know why
 

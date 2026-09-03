@@ -135,3 +135,15 @@ export interface CustomerAnalytics {
   new_customers: number;
   repeat_rate: number;
 }
+
+/** One row of the stock ledger, as returned by the adjust-stock and stock-history endpoints. */
+export interface StockAdjustment {
+  id: number;
+  delta: number;
+  new_stock: number;
+  source: 'web-admin' | 'companion' | 'order' | 'cancel';
+  note: string | null;
+  created_at: string;
+  /** Only on stock-history rows; null when the acting account has since been deleted. */
+  user_email?: string | null;
+}

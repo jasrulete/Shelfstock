@@ -169,6 +169,38 @@ describe('POST /api/orders (checkout)', () => {
   });
 });
 
+describe('POST /api/orders and the stock ledger', () => {
+  // Stock moved, so the ledger has to say so - in the same transaction, with
+  // the order it belongs to, or the admin's "where did 3 come from?" has no
+  // answer for the most common way stock ever moves.
+  it('writes one order-sourced ledger row per line, after the order exists, before COMMIT', async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FOR UPDATE')) {
+        return { rows: [{ id: 7, name: 'Ceramic Mug', price: '19.99', stock: 5 }] };
+      }
+      if (sql.includes('INSERT INTO orders')) {
+        return { rows: [{ id: 42, user_id: 1, total_amount: '39.98', status: 'pending' }] };
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${tokenFor(1)}`)
+      .send({ items: [{ productId: 7, quantity: 2 }], shipping: validShipping });
+
+    expect(res.status).toBe(201);
+    const ledger = txCall('INSERT INTO stock_adjustments')!;
+    expect(ledger).toBeDefined();
+    // product_id, delta, new_stock (5 - 2, read under the lock), source, user, note
+    expect(ledger[1]).toEqual([7, -2, 3, 'order', 1, 'Order #42']);
+
+    const sql = clientQuery.mock.calls.map(([s]) => s as string);
+    expect(sql.findIndex((s) => s.includes('INSERT INTO orders'))).toBeLessThan(sql.indexOf(ledger[0]));
+    expect(sql.indexOf(ledger[0])).toBeLessThan(sql.indexOf('COMMIT'));
+  });
+});
+
 describe('GET /api/orders/:id (row-level authorization)', () => {
   const order = { id: 9, user_id: 2, total_amount: '10.00', status: 'pending' };
 
@@ -362,6 +394,33 @@ describe('PATCH /api/orders/:id/status', () => {
     expect(res.status).toBe(200);
     expect(txCall('stock = p.stock + oi.quantity')![1]).toEqual([5]);
     expect(txCall('COMMIT')).toBeDefined();
+  });
+
+  it('writes a cancel-sourced ledger row for every line whose stock came back', async () => {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FOR UPDATE')) return { rows: [{ id: 5, status: 'pending', user_id: 2 }] };
+      if (sql.includes('stock = p.stock + oi.quantity')) {
+        return { rows: [{ product_id: 7, quantity: 2, stock: 5 }, { product_id: 8, quantity: 1, stock: 1 }] };
+      }
+      if (sql.includes('UPDATE orders SET status')) {
+        return { rows: [{ id: 5, status: 'cancelled', user_id: 2 }] };
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'cancelled' });
+
+    expect(res.status).toBe(200);
+    const ledger = clientQuery.mock.calls.filter(([s]) => (s as string).includes('INSERT INTO stock_adjustments'));
+    expect(ledger.map(([, params]) => params)).toEqual([
+      [7, 2, 5, 'cancel', 1, 'Order #5 cancelled'],
+      [8, 1, 1, 'cancel', 1, 'Order #5 cancelled'],
+    ]);
+    const sql = clientQuery.mock.calls.map(([s]) => s as string);
+    expect(sql.lastIndexOf(ledger[1][0] as string)).toBeLessThan(sql.indexOf('COMMIT'));
   });
 
   it('allows a shipped order to complete without touching stock', async () => {
