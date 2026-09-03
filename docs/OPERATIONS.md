@@ -128,6 +128,38 @@ completed order to `completed`. The matrix refuses self-transitions, so it
 answers 400 and changes nothing either way — which distinguishes it safely from
 the old code, which accepted it as a no-op.
 
+### Reading CSP reports
+
+The page CSP is report-only ([KW-1](SECURITY.md#kw-1--the-jwt-lives-in-localstorage)).
+Browsers POST violations to `/api/csp-report`, and each becomes one line in the
+Vercel function log:
+
+```
+CSP violation: script-src blocked https://example.net/x.js on https://shelfstock-jer2x.vercel.app/products/6 (source https://…/app.js:42)
+```
+
+Vercel → project `shelfstock-frontend` → **Logs**, filter on `CSP violation`.
+Nothing else in the log starts with that prefix.
+
+**Promoting the header to enforcing** — do all of it, in order:
+
+1. On production, visit every route family under `frontend/app/`: `/`,
+   `/products/[id]`, `/cart`, `/checkout`, `/login`, `/register`,
+   `/forgot-password`, `/reset-password`, `/orders`, and every `/admin/*` page.
+   Complete a checkout and open an order, so the dynamic paths render.
+2. Read the log. Every `CSP violation:` line is either a source the policy is
+   missing (add it to `next.config.js`) or a genuine problem (fix it). Repeat
+   from step 1 until a full pass produces none.
+3. Leave it collecting for a day of ordinary traffic. Still none?
+4. In `next.config.js`, rename the header key from
+   `Content-Security-Policy-Report-Only` to `Content-Security-Policy`. Update
+   `tests/securityHeaders.test.ts`, which currently asserts the enforcing
+   header is absent, and the residual paragraph of KW-1.
+
+Skipping steps 1–3 ships a policy that has never been checked against the
+pages it governs, and the first person to find the gap is a visitor with a
+blank page.
+
 ## 6. Runbook
 
 ### The site shows an error page on first click

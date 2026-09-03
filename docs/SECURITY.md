@@ -67,17 +67,26 @@ The only unescaped HTML injection point, JSON-LD, goes through
 **Residual, and it is real:** the CSP ships as
 `Content-Security-Policy-Report-Only`, because Next needs `'unsafe-inline'` for
 its bootstrap script and `next/font`'s injected styles unless every render
-threads a nonce. **Report-only enforces nothing**, and there is no
-`report-uri`/`report-to` directive, so violations reach only the console of
-whoever triggers them. Two consequences follow:
+threads a nonce. **Report-only enforces nothing.** What it does do is report:
+the browser POSTs each violation to `POST /api/csp-report` — the legacy
+`report-uri` shape and the Reporting API batch are both accepted — and every
+one lands in the server log as a single bounded `CSP violation:` line carrying
+the directive, the blocked URL, the page and the source location, nothing
+else. Two consequences follow:
 
 - `frame-ancestors` in that header is inert. Clickjacking is genuinely blocked
   — by the `X-Frame-Options: DENY` beside it, which *is* enforcing.
-- "Promote once the report is clean" currently has no report to read. Promotion
-  needs either a reporting endpoint or a documented manual pass over the
-  console on every page. **Do not promote the header without doing one of
-  those first** — an unverified enforcing CSP breaks the storefront for real
+- Promotion to an enforcing header is a deliberate step with a written
+  procedure — [OPERATIONS.md §5](OPERATIONS.md#reading-csp-reports) — and
+  `tests/securityHeaders.test.ts` pins that no enforcing CSP ships until
+  someone changes that test on purpose. **Do not promote without reading the
+  report first** — an unverified enforcing CSP breaks the storefront for real
   visitors.
+
+The report endpoint is necessarily unauthenticated, so anyone can POST to it.
+What bounds that: a 50 kB body limit on the route's own parser, the global rate
+limiter, every logged field clipped to 200 characters, and a `204` with an
+empty body no matter what was sent — it cannot be used to reflect content.
 
 ### KW-2 — Rate limiting is per-instance
 
