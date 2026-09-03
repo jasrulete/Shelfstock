@@ -6,6 +6,7 @@ import { OrderStatus } from '../types';
 import { ORDER_STATUSES, canTransition } from '../orderStatus';
 import { sendOrderConfirmation, sendOrderShipped } from '../mail';
 import { notifyAdminsNewOrder } from '../push';
+import { afterResponse } from '../afterResponse';
 
 const router = Router();
 
@@ -142,15 +143,17 @@ router.post('/', requireAuth, async (req, res) => {
     await client.query('COMMIT');
     res.status(201).json(order);
 
-    // Fire-and-forget after the response: an email failure only logs and
-    // can never fail (or slow down) the order itself.
-    pool
-      .query('SELECT email FROM users WHERE id = $1', [req.user!.userId])
-      .then(({ rows }) => rows[0] && sendOrderConfirmation(rows[0].email, order, snapshottedItems))
-      .catch((emailErr) => console.error('Order confirmation email error:', emailErr));
+    // Registered with the platform rather than left to chance: see
+    // afterResponse. An email or push failure still only logs, and still
+    // cannot fail or slow down the order itself.
+    afterResponse(
+      'Order confirmation email error',
+      pool
+        .query('SELECT email FROM users WHERE id = $1', [req.user!.userId])
+        .then(({ rows }) => rows[0] && sendOrderConfirmation(rows[0].email, order, snapshottedItems))
+    );
 
-    // Same fire-and-forget contract as the confirmation email above.
-    notifyAdminsNewOrder(order).catch((pushErr) => console.error('Order push error:', pushErr));
+    afterResponse('Order push error', notifyAdminsNewOrder(order));
   } catch (err: any) {
     await client.query('ROLLBACK');
     if (err?.status) {
@@ -345,10 +348,12 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
     res.json(updatedOrder);
 
     if (status === 'shipped') {
-      pool
-        .query('SELECT email FROM users WHERE id = $1', [updatedOrder.user_id])
-        .then(({ rows }) => rows[0] && sendOrderShipped(rows[0].email, updatedOrder))
-        .catch((emailErr) => console.error('Order shipped email error:', emailErr));
+      afterResponse(
+        'Order shipped email error',
+        pool
+          .query('SELECT email FROM users WHERE id = $1', [updatedOrder.user_id])
+          .then(({ rows }) => rows[0] && sendOrderShipped(rows[0].email, updatedOrder))
+      );
     }
   } catch (err) {
     await client.query('ROLLBACK');

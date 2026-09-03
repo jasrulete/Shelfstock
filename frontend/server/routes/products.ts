@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db';
-import { requireAuth } from '../middleware/auth';
+import { optionalAuth, requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
 import reviewsRouter from './reviews';
 import {
@@ -210,14 +210,16 @@ router.get('/barcode/:code', requireAuth, adminOnly, async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+// optionalAuth, not requireAuth: the product page is public, but a signed-in
+// admin also gets the barcode because the companion's edit form round-trips it.
+router.get('/:id', optionalAuth, async (req, res) => {
   const id = parseId(req.params.id);
   if (id === null) {
     return res.status(404).json({ error: 'Product not found' });
   }
 
   try {
-    const product = await getProductById(id);
+    const product = await getProductById(id, { includeBarcode: req.user?.role === 'admin' });
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }

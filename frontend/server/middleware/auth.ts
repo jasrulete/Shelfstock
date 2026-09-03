@@ -27,3 +27,25 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 }
+
+/**
+ * Attaches req.user when a valid Bearer token is present and does nothing
+ * otherwise - no 401 either way. For endpoints that are genuinely public but
+ * return MORE to a signed-in admin, where requireAuth would lock the public
+ * out and no auth at all would hand everyone the admin projection.
+ *
+ * A malformed or expired token is treated as absent rather than rejected: the
+ * response is public data, so failing the whole request over a stale token
+ * would break a signed-out shopper whose JWT merely aged out.
+ */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) {
+    try {
+      req.user = jwt.verify(header.slice('Bearer '.length), JWT_SECRET) as JwtPayload;
+    } catch {
+      // Anonymous. Deliberately not an error.
+    }
+  }
+  next();
+}

@@ -39,6 +39,18 @@ export default function AdminProductsPage() {
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  /**
+   * Whether the gallery for the product being edited has actually arrived.
+   *
+   * The form seeds `images: ''` and fills it from a later fetch, while the
+   * submit payload sends `images: []` for a blank field - and the API
+   * documents `[]` as "clear the gallery". So saving before the fetch landed,
+   * or after it failed, silently deleted every gallery row. False here means
+   * the key is omitted from the payload entirely, which leaves the gallery
+   * untouched.
+   */
+  const [galleryLoaded, setGalleryLoaded] = useState(false);
+  const [galleryError, setGalleryError] = useState(false);
 
   const loadProducts = useCallback(() => {
     api
@@ -66,6 +78,37 @@ export default function AdminProductsPage() {
     setForm((prev) => ({ ...prev, ...patch }));
   }
 
+  function loadGallery(productId: number) {
+    setGalleryLoaded(false);
+    setGalleryError(false);
+
+    // Only the detail endpoint returns the gallery. Fetched after the form is
+    // populated so editing stays instant, and dropped if the admin has already
+    // moved on to a different product by the time it lands - otherwise a slow
+    // response could overwrite whatever they are editing now.
+    api
+      .get<Product>(`/api/products/${productId}`)
+      .then((full) => {
+        const extras = (full.images ?? []).filter((url) => url !== full.image_url);
+        setEditingId((current) => {
+          if (current === productId) {
+            setForm((prev) => ({ ...prev, images: extras.join('\n') }));
+            setGalleryLoaded(true);
+          }
+          return current;
+        });
+      })
+      .catch(() => {
+        // Surfaced rather than swallowed: the admin needs to know the gallery
+        // field is not showing the truth, because saving over it would have
+        // wiped the gallery before this guard existed.
+        setEditingId((current) => {
+          if (current === productId) setGalleryError(true);
+          return current;
+        });
+      });
+  }
+
   function startEdit(product: Product) {
     setEditingId(product.id);
     setForm({
@@ -80,35 +123,22 @@ export default function AdminProductsPage() {
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Only the detail endpoint returns the gallery. Fetched after the form is
-    // populated so editing stays instant, and dropped if the admin has already
-    // moved on to a different product by the time it lands - otherwise a slow
-    // response could overwrite whatever they are editing now.
-    api
-      .get<Product>(`/api/products/${product.id}`)
-      .then((full) => {
-        const extras = (full.images ?? []).filter((url) => url !== full.image_url);
-        setEditingId((current) => {
-          if (current === product.id) {
-            setForm((prev) => ({ ...prev, images: extras.join('\n') }));
-          }
-          return current;
-        });
-      })
-      .catch(() => {
-        /* leave the gallery field blank rather than blocking the edit */
-      });
+    loadGallery(product.id);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setForm(emptyForm);
+    setGalleryLoaded(false);
+    setGalleryError(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
+
+    const isEditing = editingId !== null;
 
     const payload = {
       name: form.name.trim(),
@@ -118,11 +148,18 @@ export default function AdminProductsPage() {
       stock: Number(form.stock),
       image_url: form.image_url.trim() || null,
       // One URL per line. Sent as [] when blank, which clears the gallery;
-      // omitting the key entirely would instead leave it untouched.
-      images: form.images
-        .split(/\r?\n/)
-        .map((u) => u.trim())
-        .filter(Boolean),
+      // omitting the key entirely instead leaves it untouched - which is what
+      // an edit whose gallery never loaded must do, or saving the form wipes
+      // every gallery row. A new product has no gallery to protect, so it
+      // always sends the key.
+      ...(!isEditing || galleryLoaded
+        ? {
+            images: form.images
+              .split(/\r?\n/)
+              .map((u) => u.trim())
+              .filter(Boolean),
+          }
+        : {}),
     };
 
     try {
@@ -212,7 +249,27 @@ export default function AdminProductsPage() {
                 hint="One URL per line, up to 8. These appear as extra angles on the product page. Hosts must be allowlisted in next.config.js."
                 value={form.images}
                 onChange={(e) => patchForm({ images: e.target.value })}
+                disabled={editingId !== null && !galleryLoaded}
               />
+              {editingId !== null && !galleryLoaded && (
+                <p className="mt-1 text-sm text-gray-500" role="status">
+                  {galleryError ? (
+                    <>
+                      Couldn&apos;t load this product&apos;s gallery, so it won&apos;t be changed
+                      when you save.{' '}
+                      <button
+                        type="button"
+                        onClick={() => loadGallery(editingId)}
+                        className="underline hover:no-underline"
+                      >
+                        Try again
+                      </button>
+                    </>
+                  ) : (
+                    'Loading the current gallery…'
+                  )}
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <Textarea
