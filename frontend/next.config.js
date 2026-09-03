@@ -14,8 +14,14 @@ const exchangeRateOrigin = (() => {
  * Report-only on purpose. Next needs 'unsafe-inline' for its bootstrap script
  * and for next/font's injected styles unless every render threads a nonce,
  * which force-dynamic pages make possible but is a bigger change than this.
- * Ship it collecting violations first; promote to Content-Security-Policy once
- * the report is clean and the nonce work is done.
+ *
+ * Report-only enforces nothing, so its value is entirely in the report. Both
+ * reporting mechanisms point at POST /api/csp-report: report-uri for Firefox
+ * and Safari, report-to (with the Reporting-Endpoints header below) for
+ * Chromium. Each violation becomes one "CSP violation:" line in the server
+ * log. The promotion procedure - read that log across every page first - is
+ * in docs/OPERATIONS.md, and tests/securityHeaders.test.ts pins that no
+ * enforcing header ships until someone changes it on purpose.
  */
 const csp = [
   "default-src 'self'",
@@ -28,6 +34,8 @@ const csp = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  'report-uri /api/csp-report',
+  'report-to csp-endpoint',
 ].join('; ');
 
 /** @type {import('next').NextConfig} */
@@ -53,6 +61,9 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
           },
+          // Names the group that the CSP's report-to directive refers to. A
+          // relative URL is resolved against the page, per the Reporting API.
+          { key: 'Reporting-Endpoints', value: 'csp-endpoint="/api/csp-report"' },
           { key: 'Content-Security-Policy-Report-Only', value: csp },
         ],
       },

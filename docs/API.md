@@ -163,6 +163,7 @@ changing `server/orderStatus.ts`, this table, and
 | GET | `/api/analytics/low-stock` | admin | Not the same as the public `/api/products/low-stock`. |
 | GET | `/api/analytics/stale-orders` | admin | |
 | GET | `/api/analytics/customers` | admin | |
+| POST | `/api/csp-report` | public | Browser CSP violation reports. Accepts `application/csp-report` and `application/reports+json`, 50 kB max. Always `204` with an empty body; logs one bounded `CSP violation:` line per report and never echoes anything. |
 | GET | `/api/health` | public | Readiness. **Touches Postgres**: `{ "status": "ok", "database": "ok" }`. |
 | GET | `/health` | public | Liveness only. Answers `ok` unconditionally — do not monitor this one. |
 | GET | `/api/cron/winback` | `CRON_SECRET` | Vercel Cron. `503` when the secret is unset, so it cannot mail real customers from an environment that was never meant to. |

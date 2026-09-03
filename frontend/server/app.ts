@@ -5,6 +5,7 @@ import { pool } from './db';
 import analyticsRoutes from './routes/analytics';
 import authRoutes from './routes/auth';
 import categoriesRoutes from './routes/categories';
+import cspReportRoutes from './routes/cspReport';
 import customersRoutes from './routes/customers';
 import devicesRoutes from './routes/devices';
 import ordersRoutes from './routes/orders';
@@ -75,6 +76,7 @@ export function createApp() {
   app.use('/api/customers', customersRoutes);
   app.use('/api/devices', devicesRoutes);
   app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/csp-report', cspReportRoutes);
 
   // Centralized 404 for unmatched API routes
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
