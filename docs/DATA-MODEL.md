@@ -38,7 +38,7 @@ users ──┬──< orders ──< order_items >── products ──┬─�
 | `category` | VARCHAR(100) NOT NULL | Free text, not a FK to `categories`. |
 | `stock` | INTEGER NOT NULL | `CHECK (stock >= 0)` — the database is the last line against oversell. |
 | `image_url` | TEXT | Cover image. Leads the gallery. |
-| `barcode` | VARCHAR(64) | **Admin-only in the API** — [INV-8](ARCHITECTURE.md#inv-8--productsbarcode-is-admin-only). Nullable, unique when set. |
+| `barcode` | VARCHAR(64) | **Admin-only in the API** — [INV-8](ARCHITECTURE.md#inv-8--productsbarcode-is-admin-only). Nullable, unique when set. The store's own values are EAN-13s in GS1's internal-use prefix `200` + the id (`lib/ean13.js`); a code from real packaging is never overwritten. |
 | `created_at` | TIMESTAMPTZ | |
 
 The constraint name `products_barcode_key` is **load-bearing**: the 409 path

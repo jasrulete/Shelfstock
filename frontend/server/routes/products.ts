@@ -3,6 +3,7 @@ import { pool } from '../db';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
 import { CLIENT_STOCK_SOURCES, recordStockAdjustment, type StockSource } from '../stockLedger';
+import { ean13FromProductId } from '../../lib/ean13';
 import reviewsRouter from './reviews';
 import {
   ProductListParams,
@@ -126,9 +127,13 @@ async function replaceGallery(
  * and slicing in JS. That keeps memory flat and query time proportional to
  * the page size regardless of how large the products table gets.
  */
-router.get('/', async (req, res) => {
+// optionalAuth, as on GET /:id: the list is public, and an admin also gets each
+// product's barcode so the printable sheet can cover the whole catalogue.
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    res.json(await listProducts(req.query as ProductListParams));
+    res.json(
+      await listProducts(req.query as ProductListParams, { includeBarcode: req.user?.role === 'admin' })
+    );
   } catch (err) {
     console.error('List products error:', err);
     res.status(500).json({ error: 'Failed to fetch products' });
@@ -431,6 +436,50 @@ router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
     res.status(500).json({ error: 'Failed to adjust stock' });
   } finally {
     client.release();
+  }
+});
+
+/**
+ * POST /api/products/:id/assign-barcode
+ *
+ * Gives a product the store's own EAN-13: GS1 prefix 200 - the range GS1
+ * reserves for internal use, so it can never collide with a real product's
+ * code - then the id, zero-padded, then the check digit. Deterministic, so no
+ * table; structurally valid, so any scanner reads it. Roadmap 3.4: without
+ * real codes the scan demo falls through to the manual path, which looks
+ * like the feature is missing.
+ *
+ * Never overwrites. A product whose code came from real packaging keeps it,
+ * and the answer is a 409 carrying that code.
+ */
+router.post('/:id/assign-barcode', requireAuth, adminOnly, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+
+  try {
+    const code = ean13FromProductId(id);
+    const updated = await pool.query(
+      'UPDATE products SET barcode = $1 WHERE id = $2 AND barcode IS NULL RETURNING *',
+      [code, id]
+    );
+    if (updated.rows.length > 0) {
+      return res.json(updated.rows[0]);
+    }
+    const existing = await pool.query('SELECT id, barcode FROM products WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res
+      .status(409)
+      .json({ error: 'This product already has a barcode', barcode: existing.rows[0].barcode });
+  } catch (err) {
+    if (isBarcodeConflict(err)) {
+      return res.status(409).json({ error: 'A product with this barcode already exists' });
+    }
+    console.error('Assign barcode error:', err);
+    res.status(500).json({ error: 'Failed to assign a barcode' });
   }
 });
 

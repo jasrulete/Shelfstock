@@ -117,6 +117,12 @@ The low-stock seed uses `LEAST(stock, target)` so it can lower but **never
 raise**. Re-running it against a store with real sales is a no-op, and sold out
 stays sold out.
 
+The seed also gives every product without a barcode the store's own EAN-13
+(GS1 internal-use prefix `200` + the id) and never overwrites one. The admin's
+"Assign barcode" button and `/admin/barcodes` produce the same codes through
+`POST /api/products/:id/assign-barcode`, so a hosted database can be filled
+from the browser without running the script at all.
+
 ## 5. Monitoring
 
 None is configured. What exists to watch:

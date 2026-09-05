@@ -115,7 +115,12 @@ function relevanceExpression(placeholder: number): string {
  * the page size regardless of how large the products table gets.
  */
 export async function listProducts(
-  params: ProductListParams
+  params: ProductListParams,
+  // barcode is an internal stock-keeping code (INV-8): never on the public
+  // list, present for an admin so the printable barcode sheet can list the
+  // whole catalogue. Off by default so the storefront's Server Components,
+  // which call this directly, cannot pick it up by accident.
+  { includeBarcode = false }: { includeBarcode?: boolean } = {}
 ): Promise<{ products: any[]; pagination: Pagination }> {
   const { search, category, minPrice, maxPrice, sort = 'created_at', order = 'desc' } = params;
 
@@ -187,7 +192,7 @@ export async function listProducts(
   values.push(limitNum, offset);
   const dataResult = await pool.query(
     `SELECT p.id, p.name, p.description, p.price, p.category, p.stock, p.image_url,
-              p.created_at,
+              p.created_at, ${includeBarcode ? 'p.barcode,' : ''}
               ${RATING_COLUMNS}
        FROM products p
        ${RATING_JOIN}

@@ -53,6 +53,7 @@ export default function NavBar() {
                 <>
                   <Link href="/admin/dashboard">Dashboard</Link>
                   <Link href="/admin/products">Products</Link>
+                  <Link href="/admin/barcodes">Barcodes</Link>
                   <Link href="/admin/orders">Manage Orders</Link>
                   <Link href="/admin/customers">Customers</Link>
                 </>
