@@ -137,8 +137,8 @@ from the client's side it is a read-modify-write, so **a stepper must use
 | POST | `/` | user | Create. `{ items: [{ productId, quantity }], shipping: { name, phone, address, city } }` — all four shipping fields required. Max 100 line items. |
 | GET | `/` | admin | All orders. |
 | GET | `/my` | user | The caller's own orders. |
-| GET | `/:id` | user | Own order, or any order for an admin. |
-| PATCH | `/:id/status` | admin | `{ status }`, checked against the matrix. |
+| GET | `/:id` | user | Own order, or any order for an admin. **An admin's `items[]` carry each line's `barcode`** for the companion's pack screen; a customer's never do (INV-8). |
+| PATCH | `/:id/status` | admin | `{ status, note? }`, checked against the matrix. `note` (≤200 chars) is what the pack screen's "Ship anyway" skipped — **logged server-side, never stored, never echoed**; storing it needs a migration and is deferred. |
 
 ### Two behaviours worth knowing
 

@@ -260,6 +260,53 @@ describe('allowed_transitions on order payloads', () => {
   });
 });
 
+/**
+ * Roadmap 3.5, scan-to-verify: the phone matches each scan against the
+ * order's lines, so an admin needs every line's barcode. A customer reading
+ * their own order must not get it - INV-8 holds on this route too.
+ */
+describe('barcode on order items', () => {
+  function serveOrder() {
+    poolQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM orders WHERE id')) {
+        return { rows: [{ id: 9, user_id: 2, status: 'pending', total_amount: '10.00' }] };
+      }
+      if (sql.includes('FROM order_items')) {
+        return {
+          rows: [
+            { id: 1, order_id: 9, product_id: 6, quantity: 2, price_at_purchase: '5.00', product_name: 'Mug', barcode: '2000000000060' },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+  }
+
+  it("an admin gets each line's barcode, so the pack screen can match scans", async () => {
+    serveOrder();
+
+    const res = await request(app).get('/api/orders/9').set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(200);
+    const itemsSql = poolQuery.mock.calls.map(([s]) => s as string).find((s) => s.includes('FROM order_items'))!;
+    expect(itemsSql).toMatch(/p\.barcode/);
+    expect(res.body.items[0].barcode).toBe('2000000000060');
+  });
+
+  it('the customer who owns the order gets items without a barcode key', async () => {
+    serveOrder();
+
+    const res = await request(app).get('/api/orders/9').set('Authorization', `Bearer ${tokenFor(2)}`);
+
+    expect(res.status).toBe(200);
+    const itemsSql = poolQuery.mock.calls.map(([s]) => s as string).find((s) => s.includes('FROM order_items'))!;
+    expect(itemsSql).not.toMatch(/p\.barcode/);
+    // Belt and braces: even a row that carried it is stripped before it leaves.
+    expect(res.body.items[0]).not.toHaveProperty('barcode');
+    expect(res.body.items[0].product_name).toBe('Mug');
+  });
+});
+
 describe('GET /api/orders/:id (row-level authorization)', () => {
   const order = { id: 9, user_id: 2, total_amount: '10.00', status: 'pending' };
 
@@ -480,6 +527,41 @@ describe('PATCH /api/orders/:id/status', () => {
     ]);
     const sql = clientQuery.mock.calls.map(([s]) => s as string);
     expect(sql.lastIndexOf(ledger[1][0] as string)).toBeLessThan(sql.indexOf('COMMIT'));
+  });
+
+  // The pack screen's "Ship anyway" override sends what it skipped. There is
+  // no column for it and adding one needs a migration, so for now it is one
+  // line in the server log - the same place CSP reports go - never stored,
+  // never echoed.
+  it('accepts a short pack note, logs it, and never writes it to the database', async () => {
+    orderInStatus('pending', 'shipped');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'shipped', note: 'Shipped with 1 of 3 lines unverified' });
+
+    expect(res.status).toBe(200);
+    const logged = warn.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logged).toContain('Order #5');
+    expect(logged).toContain('1 of 3 lines unverified');
+    expect(clientQuery.mock.calls.some(([, params]) => JSON.stringify(params ?? []).includes('unverified'))).toBe(false);
+    warn.mockRestore();
+  });
+
+  it.each([
+    ['too long', 'x'.repeat(201)],
+    ['not a string', 5],
+  ])('rejects a pack note that is %s with 400, before touching the database', async (_label, note) => {
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'shipped', note });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/note/);
+    expect(poolConnect).not.toHaveBeenCalled();
   });
 
   it('answers with the transitions now allowed from the new status', async () => {
