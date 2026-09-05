@@ -16,7 +16,7 @@ inventory.
 | [0004](0004-offline-reads-not-writes.md) | The companion caches products offline, never orders | Accepted |
 | [0005](0005-stateless-jwt-auth.md) | Auth stays stateless; the role claim is not re-read | Accepted, with known cost |
 | [0006](0006-forced-login-no-guest-checkout.md) | Checkout requires an account | Accepted |
-| [0007](0007-server-owns-the-order-lifecycle.md) | The server owns the order lifecycle; clients must not copy it | Accepted, **not yet implemented** |
+| [0007](0007-server-owns-the-order-lifecycle.md) | The server owns the order lifecycle; clients must not copy it | Accepted, implemented 2026-09-05 |
 | [0008](0008-apk-distribution-no-play-store.md) | The companion ships as a GitHub Release APK | Accepted |
 
 ## Writing a new one

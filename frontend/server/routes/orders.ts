@@ -3,13 +3,23 @@ import { pool } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
 import { OrderStatus } from '../types';
-import { ORDER_STATUSES, canTransition } from '../orderStatus';
+import { ORDER_STATUSES, allowedTransitionsFor, canTransition } from '../orderStatus';
 import { sendOrderConfirmation, sendOrderShipped } from '../mail';
 import { notifyAdminsNewOrder } from '../push';
 import { afterResponse } from '../afterResponse';
 import { recordStockAdjustment } from '../stockLedger';
 
 const router = Router();
+
+/**
+ * Every order payload carries the statuses the matrix will accept next
+ * (ADR-0007). Clients render their buttons from this field instead of a copy
+ * of the lifecycle - the companion kept a copy, it drifted, and a same-day
+ * cash-on-delivery handover was forced through a bogus "shipped" hop.
+ */
+function withTransitions<T extends { status: string }>(order: T) {
+  return { ...order, allowed_transitions: allowedTransitionsFor(order.status) };
+}
 
 interface CartItemInput {
   productId: number;
@@ -223,7 +233,7 @@ router.get('/', requireAuth, adminOnly, async (req, res) => {
     );
 
     res.json({
-      orders: result.rows,
+      orders: result.rows.map(withTransitions),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (err) {
@@ -262,7 +272,7 @@ router.get('/my', requireAuth, async (req, res) => {
       itemsByOrder.set(item.order_id, list);
     }
 
-    res.json(orders.map((o) => ({ ...o, items: itemsByOrder.get(o.id) ?? [] })));
+    res.json(orders.map((o) => withTransitions({ ...o, items: itemsByOrder.get(o.id) ?? [] })));
   } catch (err) {
     console.error('List my orders error:', err);
     res.status(500).json({ error: 'Failed to fetch orders' });
@@ -300,7 +310,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       [order.id]
     );
 
-    res.json({ ...order, items: itemsResult.rows });
+    res.json(withTransitions({ ...order, items: itemsResult.rows }));
   } catch (err) {
     console.error('Get order error:', err);
     res.status(500).json({ error: 'Failed to fetch order' });
@@ -377,7 +387,9 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
 
     await client.query('COMMIT');
     const updatedOrder = updated.rows[0];
-    res.json(updatedOrder);
+    // With the transitions now allowed from the NEW status, so the phone can
+    // redraw its buttons from this response without a refetch.
+    res.json(withTransitions(updatedOrder));
 
     if (status === 'shipped') {
       afterResponse(

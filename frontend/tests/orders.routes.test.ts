@@ -201,6 +201,65 @@ describe('POST /api/orders and the stock ledger', () => {
   });
 });
 
+/**
+ * ADR-0007: the server serves the lifecycle so no client keeps a copy. The
+ * companion kept one and it drifted - it lacked pending -> completed, so a
+ * same-day COD handover was forced through a bogus "shipped" hop. Every order
+ * payload now carries the transitions the matrix allows for its status.
+ */
+describe('allowed_transitions on order payloads', () => {
+  it('GET /:id carries the transitions the matrix allows for its status', async () => {
+    poolQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM orders WHERE id')) {
+        return { rows: [{ id: 9, user_id: 2, status: 'pending', total_amount: '10.00' }] };
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(app).get('/api/orders/9').set('Authorization', `Bearer ${tokenFor(2)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.allowed_transitions).toEqual(ALLOWED_TRANSITIONS.pending);
+    // The edge the companion's copy was missing.
+    expect(res.body.allowed_transitions).toContain('completed');
+  });
+
+  it('GET / (admin list) carries them on every row, empty for terminal statuses', async () => {
+    poolQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('COUNT(*)')) return { rows: [{ total: 2 }] };
+      if (sql.includes('FROM orders o')) {
+        return {
+          rows: [
+            { id: 1, status: 'shipped', user_email: 'a@b.c' },
+            { id: 2, status: 'completed', user_email: 'd@e.f' },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(app).get('/api/orders').set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.orders.map((o: { allowed_transitions: string[] }) => o.allowed_transitions)).toEqual([
+      ALLOWED_TRANSITIONS.shipped,
+      [],
+    ]);
+  });
+
+  it('GET /my carries them too', async () => {
+    poolQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM orders WHERE user_id')) return { rows: [{ id: 3, user_id: 2, status: 'pending' }] };
+      return { rows: [] };
+    });
+
+    const res = await request(app).get('/api/orders/my').set('Authorization', `Bearer ${tokenFor(2)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body[0].allowed_transitions).toEqual(ALLOWED_TRANSITIONS.pending);
+  });
+});
+
 describe('GET /api/orders/:id (row-level authorization)', () => {
   const order = { id: 9, user_id: 2, total_amount: '10.00', status: 'pending' };
 
@@ -421,6 +480,19 @@ describe('PATCH /api/orders/:id/status', () => {
     ]);
     const sql = clientQuery.mock.calls.map(([s]) => s as string);
     expect(sql.lastIndexOf(ledger[1][0] as string)).toBeLessThan(sql.indexOf('COMMIT'));
+  });
+
+  it('answers with the transitions now allowed from the new status', async () => {
+    orderInStatus('pending', 'shipped');
+
+    const res = await request(app)
+      .patch('/api/orders/5/status')
+      .set('Authorization', `Bearer ${tokenFor(1, 'admin')}`)
+      .send({ status: 'shipped' });
+
+    expect(res.status).toBe(200);
+    // So the phone can redraw its buttons from the response without a refetch.
+    expect(res.body.allowed_transitions).toEqual(ALLOWED_TRANSITIONS.shipped);
   });
 
   it('allows a shipped order to complete without touching stock', async () => {

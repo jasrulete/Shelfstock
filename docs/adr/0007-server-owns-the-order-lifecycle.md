@@ -1,6 +1,6 @@
 # 0007 — The server owns the order lifecycle; clients must not copy it
 
-**Status:** Accepted — **not yet implemented.** Tracked as Roadmap §3.2.
+**Status:** Accepted — implemented 2026-09-05 (Shelfstock #26, companion #5).
 
 ## Context
 
@@ -46,11 +46,11 @@ rendered-from-server one.
 ## Consequences
 
 - Changing the matrix becomes a one-file change again.
-- Until this ships, changing it means editing `server/orderStatus.ts`,
-  [API.md §4](../API.md#the-order-lifecycle), **and**
-  `shelfstock-companion/src/api/orders.ts` — in that order. This is written
-  down in API.md precisely because a three-place change will otherwise be a
-  two-place change.
+- Shipped: `allowed_transitions` is on `GET /`, `GET /my`, `GET /:id` and the
+  `PATCH /:id/status` response; `tests/orders.routes.test.ts` pins all four.
+  The companion's `statusActions` and its test are deleted; `transitionsFor()`
+  renders the served field and marks the one remaining fallback as stale on
+  screen. Changing the matrix is now a one-file change.
 - The drift is documented rather than quietly patched. Correcting the
   companion's copy would fix today's symptom and leave the mechanism that
   produced it intact.
