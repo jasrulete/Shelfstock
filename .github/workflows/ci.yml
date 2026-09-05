@@ -29,6 +29,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Every relative link and heading anchor across docs/, README.md and
+      # HANDOVER.md. Prose is the weakest form of enforcement; a link is the
+      # one part of it a machine can check.
+      - name: Docs links
+        run: npm run docs:check
+
       - name: Typecheck
         run: npx tsc --noEmit
 
