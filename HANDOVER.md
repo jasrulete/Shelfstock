@@ -57,6 +57,22 @@ file to pick up where the last one left off.
 > - **Still the owner's to do:** step 6, a new companion APK. Installed builds
 >   cannot self-update, so the stepper reaches a phone only through a rebuild.
 
+> **Update, 2026-09-05, later the same day: Roadmap Phase 1 is complete.**
+> Everything in §0.6 items 1–2 landed, plus the doc-link checker from item 5.
+> Merged, in order, each CI-green and mutation-checked: Shelfstock #26 and
+> companion #5 (§3.2 + §3.3), #27 (`npm run docs:check` in CI), #28 (§3.4,
+> codes assigned to production through the new endpoint), #29 and companion
+> #6 (§3.5). The roadmap table in §0.3 is updated. What remains is §4.1 —
+> the screenshots and the scan GIF, which need a phone — the CSP promotion
+> after a day of traffic, and a companion APK built from `main`, which now
+> carries the stepper, served transitions, push refresh and pack & verify.
+>
+> One thing learned that is in the code comments and worth knowing before
+> touching the companion's screen tests: RNTL's `act` is async and must be
+> awaited, and wrapping a handler that starts a TanStack mutation in a manual
+> `act` leaves React's bookkeeping such that the *next* test's render never
+> commits. A plain call with `waitFor` is the honest form.
+
 Two PRs are open and deliberately **held**. Nothing else is pending. The
 sequence to land them is in §0.2 and takes about fifteen minutes, but the
 first step needs a production database credential that only the owner can
@@ -224,11 +240,11 @@ column; PRs are the record):
 | Roadmap item | Status |
 |---|---|
 | §2 Phase 0, all eight | ✅ #19, companion #2 |
-| §3.1 Stock ledger + stepper | 🟡 in PRs #23 and companion #4 |
-| §3.2 Serve the transition matrix (ADR-0007) | ❌ next — the companion's copy is still drifted |
-| §3.3 Push refreshes the app | ❌ |
-| §3.4 Seed real barcodes | ❌ |
-| §3.5 Scan-to-verify | ❌ |
+| §3.1 Stock ledger + stepper | ✅ #23, companion #4 — verified on production |
+| §3.2 Serve the transition matrix (ADR-0007) | ✅ #26, companion #5 — `allowed_transitions` on every order payload; the companion's copy and its test are gone |
+| §3.3 Push refreshes the app | ✅ companion #5 — validated order id, debounced refetch, AppState → focusManager |
+| §3.4 Seed real barcodes | ✅ #28 — EAN-13 in GS1 prefix `200`; all six demo products coded on production; `/admin/barcodes` prints the sheet |
+| §3.5 Scan-to-verify | ✅ #29, companion #6 — **not device-verified**; the GIF the roadmap budgets into this item still needs a phone |
 | §4.1 Screenshots + scan GIF | ❌ needs a phone; capture list in §0.5 |
 | §4.2 Delete nested `.git`, archive old repo | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (8 ADRs; `0006-known-weaknesses` became SECURITY.md §3) |
