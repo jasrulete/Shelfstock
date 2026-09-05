@@ -53,7 +53,15 @@ cd frontend && npm run lint
 cd frontend && npx tsc --noEmit
 ```
 
-CI runs all three plus `npm run build`, a Dockerised end-to-end smoke test, and
+```bash
+cd frontend && npm run docs:check
+```
+
+The last one checks every relative link and heading anchor across `docs/`,
+`README.md` and `HANDOVER.md` — rename an `INV-*` heading and it tells you
+which dozen links you just broke.
+
+CI runs all four plus `npm run build`, a Dockerised end-to-end smoke test, and
 `npm audit --omit=dev --audit-level=high`. Everything must be green before
 merge.
 

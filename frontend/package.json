@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
+    "docs:check": "node scripts/check-doc-links.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "migrate": "node-pg-migrate",
