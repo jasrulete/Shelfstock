@@ -125,9 +125,12 @@ terminal. Nothing moves backwards to `pending`. No status may move to itself.
 This is an **inventory-correctness** rule, not a UI one: stock is decremented
 on create and restored on `cancelled`, so an extra edge double-counts units.
 
-*Enforced by:* `canTransition()` on the server; the web admin imports the same
-map. **The companion keeps its own copy and it has drifted** — see
-[ADR-0007](adr/0007-server-owns-the-order-lifecycle.md) and Roadmap §3.2.
+*Enforced by:* `canTransition()` on the server, and `allowed_transitions`
+served on every order payload — the web admin imports the map, the companion
+renders the served field, and **no client keeps a copy**
+([ADR-0007](adr/0007-server-owns-the-order-lifecycle.md), implemented
+2026-09-05 after the companion's copy drifted). `tests/orders.routes.test.ts`
+pins the field on all four order responses.
 
 ### INV-5 — Schema changes only through ordered, forward-only migrations
 

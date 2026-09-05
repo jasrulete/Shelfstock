@@ -51,8 +51,9 @@ cost real time:
   [INV-2](ARCHITECTURE.md#inv-2--there-is-no-next_public_api_url) forbids.
 - The documented setup steps installed in the same directory twice, and pointed
   at a `schema.sql` that no longer existed.
-- The companion still carries an order lifecycle that has **drifted from the
-  server's**, with a passing test holding the drift in place
+- The companion carried an order lifecycle that had **drifted from the
+  server's**, with a passing test holding the drift in place — fixed by
+  serving the lifecycle rather than correcting the copy
   ([ADR-0007](adr/0007-server-owns-the-order-lifecycle.md)).
 
 That last one is the reason this directory exists in its current form.

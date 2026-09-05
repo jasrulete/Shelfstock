@@ -33,3 +33,14 @@ export const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 export function canTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
 }
+
+/**
+ * The transitions a client may offer for an order in `status`, served on
+ * every order payload as `allowed_transitions` (ADR-0007). Clients render
+ * their buttons from this rather than from a copy of the matrix - the
+ * companion kept one, and it drifted. A fresh array each call, so a caller
+ * cannot mutate the matrix through it.
+ */
+export function allowedTransitionsFor(status: string): OrderStatus[] {
+  return [...(ALLOWED_TRANSITIONS[status as OrderStatus] ?? [])];
+}

@@ -4,9 +4,10 @@
 [companion app](https://github.com/jasrulete/shelfstock-companion) are clients
 of it, and **when a client disagrees with this document, the client is wrong.**
 
-That is not a formality. The companion's order lifecycle has already drifted
-from the server's, and a green test in that repo is pinning the drift in place
-— see [§7](#7-known-client-drift) and
+That is not a formality. The companion's order lifecycle drifted from the
+server's once, with a green test in that repo pinning the drift in place. It
+was fixed by serving the lifecycle instead of copying it — see
+[§7](#7-known-client-drift) and
 [ADR-0007](adr/0007-server-owns-the-order-lifecycle.md).
 
 ---
@@ -165,12 +166,13 @@ is locked**, in the same transaction that restores stock on `cancelled`.
 `pending → completed` exists on purpose: a same-day cash-on-delivery handover
 never passes through `shipped`.
 
-**This table is generated from nothing — it is a transcription of
-`server/orderStatus.ts`.** That is a weakness, and the fix is Roadmap §3.2:
-serve `allowed_transitions` on the order payload so clients render from the
-server's answer instead of a copy. Until then, changing the matrix means
-changing `server/orderStatus.ts`, this table, and
-`shelfstock-companion/src/api/orders.ts`, in that order.
+**Every order payload carries `allowed_transitions`** — the statuses the
+matrix will accept next for that order, as an array — on `GET /`, `GET /my`,
+`GET /:id`, and the `PATCH /:id/status` response (for the *new* status, so a
+client can redraw without a refetch). **Clients render their buttons from that
+field**, never from a copy of this table. The table above is a transcription of
+`server/orderStatus.ts` for the reader; the field is the contract, and
+changing the matrix is a one-file change.
 
 ## 5. Everything else
 
@@ -210,12 +212,16 @@ changing `server/orderStatus.ts`, this table, and
 |---|---|
 | Server truth | `server/orderStatus.ts` — `pending: ['shipped', 'completed', 'cancelled']` |
 | Web admin | imports it directly ✅ |
-| Companion | `src/api/orders.ts` `statusActions('pending')` returns `['shipped', 'cancelled']` ❌ |
-| The test | `src/api/__tests__/orders.test.ts` asserts the drifted value ❌ |
+| Companion, until 2026-09-05 | `statusActions('pending')` returned `['shipped', 'cancelled']` ❌ — and its test asserted that |
+| Companion, now | renders `allowed_transitions` from the payload ✅ — `statusActions` and its test are deleted |
 
-**Consequence:** a same-day COD handover cannot be completed from the phone. It
-is forced through a bogus `shipped` hop, which also fires a customer "order
-shipped" email for a parcel that was handed over in person.
+**What it cost while it lasted:** a same-day COD handover could not be
+completed from the phone. It was forced through a bogus `shipped` hop, which
+also fired a customer "order shipped" email for a parcel handed over in person.
 
-Tracked as Roadmap §3.2. Recorded here rather than silently fixed because the
-fix is to stop copying the matrix at all, not to correct the copy.
+**Why it was not simply corrected:** correcting the copy fixes the day's
+symptom and leaves the mechanism that produced it. The server now serves the
+lifecycle ([ADR-0007](adr/0007-server-owns-the-order-lifecycle.md)); the phone
+keeps one fallback for a server older than that, and marks anything drawn
+from it as stale on screen. The companion's own test asserts the screen offers
+only what the server listed, even when a local guess would offer more.

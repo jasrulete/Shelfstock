@@ -147,8 +147,8 @@ The failure mode this documentation set exists to prevent is **a document that
 describes a system nobody built**. It has happened here more than once:
 `README.md` claimed security headers that did not exist, `.env.example` set the
 one variable [INV-2](ARCHITECTURE.md#inv-2--there-is-no-next_public_api_url)
-forbids, and the companion still carries a copy of the order lifecycle that has
-drifted from the server's.
+forbids, and the companion carried a copy of the order lifecycle that had
+drifted from the server's (fixed 2026-09-05 by serving it instead).
 
 So:
 
@@ -161,9 +161,10 @@ So:
 | An invariant, or a decision with a real alternative | An [ADR](adr/) **and** [ARCHITECTURE.md](ARCHITECTURE.md) |
 
 **Prose is the weakest form of enforcement.** Prefer, in order: a type, a test,
-a served value, then a document. The order-lifecycle drift is the worked
-example — the fix is not to correct the companion's copy, it is to
-[serve the matrix](API.md#7-known-client-drift) so no copy exists.
+a served value, then a document. The order-lifecycle drift was the worked
+example — the fix was not to correct the companion's copy, it was to
+[serve the matrix](API.md#7-known-client-drift) so no copy exists. That is
+what shipped.
 
 ## 7. Testing
 
