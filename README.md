@@ -152,6 +152,11 @@ docker compose down        # stops containers; keeps the database volume
   is stored only as a SHA-256 hash, so a database dump cannot be replayed into
   an account takeover, and `/forgot-password` answers identically whether or
   not the address is registered so it cannot be used to test who shops here.
+- **Performance** — the storefront and product pages are Server Components
+  that read the database directly, so the first HTML response already carries
+  the content. A product view costs two database round trips, not four:
+  `generateMetadata` and the page body share one request-scoped read
+  (`app/products/[id]/loadProduct.ts`), and a test counts the calls.
 - **Security** — bcrypt password hashing, JWT auth with row-level ownership
   checks, rate limiting (tight on auth endpoints), request body size limits,
   and input validation on every write endpoint. Security headers come from two

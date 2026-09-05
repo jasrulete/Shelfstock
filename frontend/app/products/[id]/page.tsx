@@ -6,12 +6,12 @@ import ProductGallery from '@/components/ProductGallery';
 import ProductReviews from '@/components/ProductReviews';
 import ProductFaq from '@/components/ProductFaq';
 import RelatedProducts from '@/components/RelatedProducts';
-import { Product } from '@/types';
-import { getProductById, parseProductId } from '@/server/queries/products';
 import { siteUrl } from '@/lib/siteUrl';
 import { serializeJsonLd } from '@/lib/jsonLd';
 import PriceDisplay from './PriceDisplay';
 import AddToCartControls from './AddToCartControls';
+// Request-scoped: generateMetadata and the page body share one read.
+import { loadProduct } from './loadProduct';
 
 /**
  * Rendered per request, never cached. The whole promise of this storefront is
@@ -19,12 +19,6 @@ import AddToCartControls from './AddToCartControls';
  * count that was true a minute ago, which is precisely the claim it makes.
  */
 export const dynamic = 'force-dynamic';
-
-async function loadProduct(rawId: string): Promise<Product | null> {
-  const id = parseProductId(rawId);
-  if (id === null) return null;
-  return (await getProductById(id)) as Product | null;
-}
 
 export async function generateMetadata({
   params,
