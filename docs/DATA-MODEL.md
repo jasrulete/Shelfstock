@@ -162,6 +162,14 @@ holds.
    EXISTS` before `ADD CONSTRAINT`. This is what lets an existing database
    adopt the baseline by simply running `migrate up`, with no fake-apply step.
 3. **Ordered by the numeric filename prefix**, tracked in `pgmigrations`.
+   **The prefix is `Date.now()` when the file is created — never hand-picked.**
+   A prefix lower than a migration production has already run makes
+   node-pg-migrate refuse to apply *anything* to that database, and
+   production silently misses the migration. It has happened once:
+   `password_resets` was numbered to sit after the baseline, landed below the
+   companion migration production already had, and went unapplied for two
+   weeks. [OPERATIONS.md §6](OPERATIONS.md#not-run-migration-x-is-preceding-already-run-migration-y)
+   has the recovery.
 4. **There is no other schema path.** Postgres' `docker-entrypoint-initdb.d`
    mount was removed on purpose so one code path applies schema everywhere.
 
