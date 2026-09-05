@@ -55,7 +55,10 @@ export default function AdminProductsPage() {
 
   const loadProducts = useCallback(() => {
     api
-      .get<ProductsResponse>(`/api/products?page=${page}&limit=20&sort=created_at&order=desc`)
+      // auth: true so the admin projection - which includes barcode - comes back.
+      .get<ProductsResponse>(`/api/products?page=${page}&limit=20&sort=created_at&order=desc`, {
+        auth: true,
+      })
       .then(setData)
       .catch((err: ApiError) => setError(err.message));
   }, [page]);
@@ -91,6 +94,25 @@ export default function AdminProductsPage() {
     );
     if (editingId === id) {
       setForm((prev) => ({ ...prev, stock: String(stock) }));
+    }
+  }
+
+  /** Gives a product the store's own EAN-13 (see /admin/barcodes). Never overwrites. */
+  async function assignBarcode(product: Product) {
+    setError(null);
+    try {
+      const updated = await api.post<Product>(`/api/products/${product.id}/assign-barcode`, undefined, {
+        auth: true,
+      });
+      setData(
+        (prev) =>
+          prev && {
+            ...prev,
+            products: prev.products.map((p) => (p.id === product.id ? { ...p, barcode: updated.barcode } : p)),
+          }
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to assign a barcode');
     }
   }
 
@@ -335,7 +357,21 @@ export default function AdminProductsPage() {
               <tbody>
                 {data.products.map((product) => (
                   <tr key={product.id} className="border-b border-gray-200 last:border-0">
-                    <td className="p-2">{product.name}</td>
+                    <td className="p-2">
+                      <div>{product.name}</div>
+                      {product.barcode ? (
+                        <div className="font-mono text-xs text-gray-500">{product.barcode}</div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => assignBarcode(product)}
+                          className="text-xs text-gray-500 underline hover:text-gray-900"
+                        >
+                          Assign barcode
+                          <span className="sr-only"> to {product.name}</span>
+                        </button>
+                      )}
+                    </td>
                     <td className="p-2">{product.category}</td>
                     <td className="p-2">${Number(product.price).toFixed(2)}</td>
                     <td className="p-2">

@@ -102,3 +102,97 @@ describe('barcode exposure on product reads', () => {
     expect(res.body).not.toHaveProperty('barcode');
   });
 });
+
+/**
+ * Roadmap 3.4. The printable barcode sheet is an admin page that lists the
+ * whole catalogue with each product's code, so the admin list projection has
+ * to carry barcode for an admin - and still never for anyone else.
+ */
+describe('barcode on the admin list projection', () => {
+  it('is present on GET / for an admin', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ count: '1' }] }).mockResolvedValueOnce({ rows: [{ ...PRODUCT }] });
+
+    const res = await request(app).get('/api/products').set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(200);
+    const dataSql = poolQuery.mock.calls.map(([sql]) => sql as string).join('\n');
+    expect(dataSql).toMatch(/p\.barcode/);
+    expect(res.body.products[0].barcode).toBe('4006381333931');
+  });
+
+  it('is still absent on GET / for a signed-in customer', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ count: '1' }] }).mockResolvedValueOnce({ rows: [{ ...PRODUCT }] });
+
+    await request(app).get('/api/products').set('Authorization', `Bearer ${tokenFor(2, 'customer')}`);
+
+    const dataSql = poolQuery.mock.calls.map(([sql]) => sql as string).join('\n');
+    expect(dataSql).not.toMatch(/p\.barcode/);
+  });
+});
+
+/**
+ * POST /api/products/:id/assign-barcode gives a product the store's own
+ * EAN-13 (GS1 prefix 200, the internal-use range, then the id) so the scan
+ * demo works against a printed sheet without physical stock. It never
+ * overwrites: a product that already has a code keeps it.
+ */
+describe('POST /api/products/:id/assign-barcode', () => {
+  const admin = () => `Bearer ${tokenFor(1, 'admin')}`;
+
+  it('is admin-only', async () => {
+    expect((await request(app).post('/api/products/6/assign-barcode')).status).toBe(401);
+    expect(
+      (await request(app).post('/api/products/6/assign-barcode').set('Authorization', `Bearer ${tokenFor(2, 'customer')}`))
+        .status
+    ).toBe(403);
+    expect(poolQuery).not.toHaveBeenCalled();
+  });
+
+  it('404s a malformed id without querying', async () => {
+    const res = await request(app).post('/api/products/abc/assign-barcode').set('Authorization', admin());
+    expect(res.status).toBe(404);
+    expect(poolQuery).not.toHaveBeenCalled();
+  });
+
+  it('writes 200 + the zero-padded id + check digit, only where no barcode exists yet', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ ...PRODUCT, id: 6, barcode: '2000000000060' }] });
+
+    const res = await request(app).post('/api/products/6/assign-barcode').set('Authorization', admin());
+
+    expect(res.status).toBe(200);
+    expect(res.body.barcode).toBe('2000000000060');
+    const [sql, params] = poolQuery.mock.calls[0];
+    expect(sql).toMatch(/UPDATE products/);
+    expect(sql).toMatch(/barcode IS NULL/);
+    expect(params).toEqual(['2000000000060', 6]);
+  });
+
+  it('409s, with the existing code, when the product already has one', async () => {
+    poolQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: 6, barcode: '4006381333931' }] });
+
+    const res = await request(app).post('/api/products/6/assign-barcode').set('Authorization', admin());
+
+    expect(res.status).toBe(409);
+    expect(res.body.barcode).toBe('4006381333931');
+    expect(res.body.error).toMatch(/already/);
+  });
+
+  it('404s when the product does not exist', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] });
+
+    const res = await request(app).post('/api/products/6/assign-barcode').set('Authorization', admin());
+
+    expect(res.status).toBe(404);
+  });
+
+  it('409s when the computed code is somehow taken by another product', async () => {
+    poolQuery.mockRejectedValueOnce({ code: '23505', constraint: 'products_barcode_key' });
+
+    const res = await request(app).post('/api/products/6/assign-barcode').set('Authorization', admin());
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/barcode/);
+  });
+});

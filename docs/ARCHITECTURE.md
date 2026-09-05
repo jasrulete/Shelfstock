@@ -173,12 +173,15 @@ fixed copy plus at most `error.digest`, never `error.message`, never a stack.
 ### INV-8 — `products.barcode` is admin-only
 
 It is an internal stock-keeping code that exists for the companion scanner. It
-is absent from the public list projection and stripped from the by-id response
-unless the caller presents an admin JWT (`optionalAuth`).
+is absent from every public response and present — on the list and by id —
+only for an admin JWT (`optionalAuth` on both routes). The store's own codes
+are EAN-13s in GS1's internal-use prefix `200`, derived from the product id by
+`lib/ean13.js`; a code that came from real packaging is never overwritten.
 
-*Enforced by:* `tests/products.barcode.test.ts`, covering all four caller
-shapes. *The strip is a `delete` on the `p.*` result rather than a column
-allowlist, so a future migration cannot silently re-widen the projection.*
+*Enforced by:* `tests/products.barcode.test.ts`, covering every caller shape
+on both routes. *The by-id strip is a `delete` on the `p.*` result rather than
+a column allowlist, so a future migration cannot silently re-widen the
+projection; the list adds the column only when asked.*
 
 ### INV-9 — Post-response work goes through `afterResponse()`, and is never awaited first
 

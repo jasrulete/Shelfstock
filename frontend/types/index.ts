@@ -8,6 +8,11 @@ export interface Product {
   image_url: string | null;
   created_at: string;
   /**
+   * Internal stock-keeping code (INV-8). Present only when an admin token was
+   * sent - absent from every public response - and null until assigned.
+   */
+  barcode?: string | null;
+  /**
    * Joined aggregate, not a column. Optional because cart items are persisted
    * to localStorage and an older stored cart won't carry these fields.
    */

@@ -14,6 +14,7 @@
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
+const { ean13FromProductId } = require('../lib/ean13');
 
 const DEMO_USERS = [
   { email: 'admin@shelfstock.demo', password: 'ShelfAdmin123', role: 'admin' },
@@ -43,6 +44,7 @@ async function main() {
   }
   await seedDemoActivity();
   await setDemoStockLevels();
+  await assignBarcodes();
 
   await pool.end();
   console.log('\nDemo accounts ready.');
@@ -202,6 +204,34 @@ async function setDemoStockLevels() {
     adjusted > 0
       ? `set ${adjusted} product(s) to low stock so the scarcity UI is visible`
       : 'stock already at or below demo levels, left alone'
+  );
+}
+
+/**
+ * Gives every product without a barcode the store's own EAN-13 - GS1 prefix
+ * 200 (the internal-use range) plus the product id - so the companion's
+ * scanner has something real to read off the printable sheet at
+ * /admin/barcodes. The same code the admin "Assign barcode" button produces,
+ * from the same function.
+ *
+ * Never overwrites: a product that already has a code keeps it. That is what
+ * makes this safe to re-run, and safe against a store whose codes came from
+ * real packaging.
+ */
+async function assignBarcodes() {
+  const { rows } = await pool.query('SELECT id FROM products WHERE barcode IS NULL ORDER BY id');
+  let assigned = 0;
+  for (const { id } of rows) {
+    const result = await pool.query(
+      'UPDATE products SET barcode = $1 WHERE id = $2 AND barcode IS NULL',
+      [ean13FromProductId(id), id]
+    );
+    assigned += result.rowCount ?? 0;
+  }
+  console.log(
+    assigned > 0
+      ? `assigned internal barcodes to ${assigned} product(s)`
+      : 'every product already has a barcode, left alone'
   );
 }
 

@@ -63,6 +63,7 @@ JWTs are not invalidated by a reset, and mail does not actually send unless
 | PUT | `/:id` | admin | See the `images` rule below. A `stock` value also writes a ledger row. |
 | POST | `/:id/adjust-stock` | admin | `{ delta, source, note? }`. Atomic delta under the row lock; writes the ledger row. See [Stock moves by delta](#stock-moves-by-delta). |
 | GET | `/:id/stock-history` | admin | Last 20 ledger rows, newest first, with `user_email`. |
+| POST | `/:id/assign-barcode` | admin | Gives the product the store's own EAN-13 — GS1 internal-use prefix `200` + zero-padded id + check digit. **Never overwrites:** `409 { error, barcode }` when one exists. |
 | DELETE | `/:id` | admin | |
 | GET | `/:id/reviews` | public | Paginated, `limit` 10. Reviewer names are derived and masked server-side; **emails never leave the server**. |
 | POST | `/:id/reviews` | user | Upsert semantics — `UNIQUE (product_id, user_id)`. Sets `verified_purchase` from a real order. |
@@ -80,10 +81,16 @@ Anything reading a bare array off this endpoint is broken.
 
 ### `barcode` is admin-only — [INV-8](ARCHITECTURE.md#inv-8--productsbarcode-is-admin-only)
 
-`barcode` is an internal stock-keeping code. It is **absent** from the list
-projection entirely and **stripped** from `GET /:id` unless the caller presents
-an admin JWT. An expired or malformed token is treated as anonymous, not
-rejected: the rest of the response is public either way.
+`barcode` is an internal stock-keeping code. It is **absent** from every public
+response — the list projection and `GET /:id` alike — and present on both for
+an admin JWT, so the printable sheet at `/admin/barcodes` can cover the whole
+catalogue. Both routes use `optionalAuth`: an expired or malformed token is
+treated as anonymous, not rejected, since the rest of the response is public
+either way.
+
+The store's own codes are EAN-13s in GS1's internal-use prefix `200`, derived
+from the product id by `lib/ean13.js` and assigned by `POST /:id/assign-barcode`
+or the seed script. A code that came from real packaging is never overwritten.
 
 Clients must therefore treat `barcode` as **possibly absent**, and must not
 send a blank one back on update. The companion's `ProductForm` seeds itself
