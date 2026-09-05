@@ -10,7 +10,8 @@ column here does not exist in a migration, this document is wrong — fix it.
 ```
 users ──┬──< orders ──< order_items >── products ──┬──< product_images
         │                                          │
-        ├──< reviews >─────────────────────────────┘
+        ├──< reviews >─────────────────────────────┤
+        ├──< stock_adjustments >───────────────────┘
         ├──< password_resets
         ├──< device_tokens
         └──< winback_emails
@@ -113,6 +114,24 @@ at send time.
 `NOT EXISTS` check against this table is what stops a customer being mailed
 repeatedly.
 
+### `stock_adjustments`
+
+The stock ledger: one row per change to `products.stock`, written **in the
+same transaction** as the change —
+[INV-13](ARCHITECTURE.md#inv-13--every-change-to-productsstock-writes-a-ledger-row-in-the-same-transaction).
+Turns "stock: 12" into "stock: 12 — +5 from the companion app, 2 minutes ago".
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | SERIAL PK | |
+| `product_id` | INTEGER NOT NULL → `products` ON DELETE CASCADE | A deleted product's ledger has nothing left to explain. |
+| `delta` | INTEGER NOT NULL | `CHECK (delta <> 0)` — a no-op is not an adjustment. |
+| `new_stock` | INTEGER NOT NULL | `CHECK (>= 0)`. The count **after** this row. |
+| `source` | VARCHAR(20) NOT NULL | `CHECK IN ('web-admin', 'companion', 'order', 'cancel')`. The first two are declared by the client that pressed the button; the last two are written only by the server. |
+| `user_id` | INTEGER → `users` ON DELETE **SET NULL** | An audit row outlives the account that wrote it. |
+| `note` | TEXT | ≤200 chars at the API, stored trimmed. **Admin-typed — render as text only.** |
+| `created_at` | TIMESTAMPTZ | |
+
 ## 2. Indexes
 
 | Index | On | Why |
@@ -128,6 +147,7 @@ repeatedly.
 | `idx_reviews_product_id` | `reviews` | Product page |
 | `idx_winback_emails_user_id` | `winback_emails` | Dedup check |
 | `idx_password_resets_token_hash` (UNIQUE), `idx_password_resets_user_id` | `password_resets` | Lookup and retire-on-reissue |
+| `idx_stock_adjustments_product_recent` | `stock_adjustments (product_id, created_at DESC)` | The only read: newest rows for one product |
 
 **The three search indexes are used together in a `BitmapOr`** — measured at
 8.9ms against 1039ms for the same predicate scanned sequentially, on 40k rows.

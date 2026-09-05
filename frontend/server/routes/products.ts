@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { adminOnly } from '../middleware/adminOnly';
+import { CLIENT_STOCK_SOURCES, recordStockAdjustment, type StockSource } from '../stockLedger';
 import reviewsRouter from './reviews';
 import {
   ProductListParams,
@@ -289,6 +290,15 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Setting stock through the form is a stock change like any other, and
+    // the ledger has to see it or it is only a partial log. The row is locked
+    // first so the before/after pair is exact even against a concurrent
+    // checkout - the same lock POST /orders takes.
+    let stockBefore: number | null = null;
+    if (stock !== undefined) {
+      const current = await client.query('SELECT stock FROM products WHERE id = $1 FOR UPDATE', [id]);
+      stockBefore = current.rows[0]?.stock ?? null;
+    }
     const result = await client.query(
       `UPDATE products
        SET name = COALESCE($1, name),
@@ -318,6 +328,16 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Product not found' });
     }
+    if (stock !== undefined && typeof stockBefore === 'number' && stock !== stockBefore) {
+      await recordStockAdjustment(client, {
+        productId: id,
+        delta: stock - stockBefore,
+        newStock: stock,
+        source: 'web-admin',
+        userId: req.user!.userId,
+        note: `Set to ${stock} in the product form`,
+      });
+    }
     // Omitting `images` leaves the gallery alone; sending [] clears it. Same
     // contract as the COALESCE fields above - absent means "don't touch".
     if (Array.isArray(images)) {
@@ -334,6 +354,111 @@ router.put('/:id', requireAuth, adminOnly, async (req, res) => {
     res.status(500).json({ error: 'Failed to update product' });
   } finally {
     client.release();
+  }
+});
+
+const DELTA_MAX = 10_000;
+const NOTE_MAX = 200;
+
+/**
+ * POST /api/products/:id/adjust-stock  { delta, source, note? }
+ *
+ * Moves stock by a delta, atomically, and writes the ledger row in the same
+ * transaction. This is the only correct way for a client to nudge a count:
+ * "read 12, send 13" through PUT silently swallows any order that decremented
+ * the same product in between, and both steppers were one refactor away from
+ * doing exactly that.
+ *
+ * Rejects rather than clamps. A -5 against a stock of 3 is a 409 carrying the
+ * current count - not a silent floor at 0 with a ledger row that claims -5. A
+ * clamped adjustment that still logs is a lie in an audit table.
+ *
+ * `source` is declared by the client and limited to the two client values;
+ * 'order' and 'cancel' are written only by the server from the routes that
+ * actually move stock for those reasons.
+ */
+router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+
+  const { delta, source, note } = req.body ?? {};
+  if (!Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > DELTA_MAX) {
+    return res
+      .status(400)
+      .json({ error: `delta must be a non-zero whole number no larger than ${DELTA_MAX} either way` });
+  }
+  if (!CLIENT_STOCK_SOURCES.includes(source as StockSource)) {
+    return res.status(400).json({ error: `source must be one of: ${CLIENT_STOCK_SOURCES.join(', ')}` });
+  }
+  if (note !== undefined && note !== null && (typeof note !== 'string' || note.length > NOTE_MAX)) {
+    return res.status(400).json({ error: `note must be a string of at most ${NOTE_MAX} characters` });
+  }
+  const cleanNote = typeof note === 'string' ? note.trim() || null : null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const current = await client.query('SELECT stock FROM products WHERE id = $1 FOR UPDATE', [id]);
+    if (current.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    const before: number = current.rows[0].stock;
+    const after = before + delta;
+    if (after < 0) {
+      await client.query('ROLLBACK');
+      return res
+        .status(409)
+        .json({ error: `Only ${before} in stock; cannot remove ${-delta}`, stock: before });
+    }
+
+    await client.query('UPDATE products SET stock = $1 WHERE id = $2', [after, id]);
+    const adjustment = await recordStockAdjustment(client, {
+      productId: id,
+      delta,
+      newStock: after,
+      source: source as StockSource,
+      userId: req.user!.userId,
+      note: cleanNote,
+    });
+    await client.query('COMMIT');
+    res.json({ stock: after, adjustment });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Adjust stock error:', err);
+    res.status(500).json({ error: 'Failed to adjust stock' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * GET /api/products/:id/stock-history - the last 20 ledger rows, newest
+ * first, with the acting user's email. What lets the web admin say where a
+ * number came from instead of just what it is.
+ */
+router.get('/:id/stock-history', requireAuth, adminOnly, async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT a.id, a.delta, a.new_stock, a.source, a.note, a.created_at, u.email AS user_email
+         FROM stock_adjustments a
+         LEFT JOIN users u ON u.id = a.user_id
+        WHERE a.product_id = $1
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT 20`,
+      [id]
+    );
+    res.json({ adjustments: rows });
+  } catch (err) {
+    console.error('Stock history error:', err);
+    res.status(500).json({ error: 'Failed to fetch stock history' });
   }
 });
 

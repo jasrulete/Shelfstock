@@ -167,7 +167,7 @@ example — the fix is not to correct the companion's copy, it is to
 
 ## 7. Testing
 
-196 tests across two Vitest projects: `*.test.ts` on Node, `*.test.tsx` on a
+Two Vitest projects (`npm test` prints the current count): `*.test.ts` on Node, `*.test.tsx` on a
 DOM. Plus a Dockerised end-to-end smoke test in CI that runs against real
 Postgres.
 

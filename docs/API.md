@@ -59,7 +59,9 @@ JWTs are not invalidated by a reset, and mail does not actually send unless
 | GET | `/:id/related` | public | |
 | GET | `/barcode/:code` | admin | The companion scanner's lookup. `404` when no product carries that code. |
 | POST | `/` | admin | |
-| PUT | `/:id` | admin | See the `images` rule below. |
+| PUT | `/:id` | admin | See the `images` rule below. A `stock` value also writes a ledger row. |
+| POST | `/:id/adjust-stock` | admin | `{ delta, source, note? }`. Atomic delta under the row lock; writes the ledger row. See [Stock moves by delta](#stock-moves-by-delta). |
+| GET | `/:id/stock-history` | admin | Last 20 ledger rows, newest first, with `user_email`. |
 | DELETE | `/:id` | admin | |
 | GET | `/:id/reviews` | public | Paginated, `limit` 10. Reviewer names are derived and masked server-side; **emails never leave the server**. |
 | POST | `/:id/reviews` | user | Upsert semantics — `UNIQUE (product_id, user_id)`. Sets `verified_purchase` from a real order. |
@@ -97,6 +99,28 @@ from `GET /:id`, which is the whole reason the admin case exists.
 A client that always sends the key will wipe a gallery it never loaded. The web
 admin omits the key until its gallery fetch lands, precisely because it once
 did not.
+
+### Stock moves by delta
+
+`POST /:id/adjust-stock` is how a client nudges a count —
+[INV-13](ARCHITECTURE.md#inv-13--every-change-to-productsstock-writes-a-ledger-row-in-the-same-transaction).
+
+| Field | Rule |
+|---|---|
+| `delta` | Non-zero whole number, at most 10 000 either way. |
+| `source` | `web-admin` or `companion` — which button was pressed. `order` and `cancel` are server-written and refused here. |
+| `note` | Optional, ≤200 chars, stored trimmed; blank becomes `null`. Rendered as text only. |
+
+| Response | Meaning |
+|---|---|
+| `200 { stock, adjustment }` | Applied. `stock` is the server's count — use it, a concurrent order may have moved it. |
+| `409 { error, stock }` | The delta would take stock below zero. **Rejected, not clamped**, with the current count so the client can show it. |
+| `404` | Unknown or malformed id. |
+
+`PUT /:id` with a `stock` value still works, and also writes a ledger row for
+the difference (source `web-admin`, note "Set to N in the product form"). But
+from the client's side it is a read-modify-write, so **a stepper must use
+`adjust-stock`**, never PUT.
 
 ## 4. Orders — `/api/orders`
 

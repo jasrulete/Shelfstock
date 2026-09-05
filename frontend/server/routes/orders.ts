@@ -7,6 +7,7 @@ import { ORDER_STATUSES, canTransition } from '../orderStatus';
 import { sendOrderConfirmation, sendOrderShipped } from '../mail';
 import { notifyAdminsNewOrder } from '../push';
 import { afterResponse } from '../afterResponse';
+import { recordStockAdjustment } from '../stockLedger';
 
 const router = Router();
 
@@ -73,8 +74,13 @@ router.post('/', requireAuth, async (req, res) => {
     await client.query('BEGIN');
 
     let total = 0;
-    const snapshottedItems: { productId: number; quantity: number; price: number; name: string }[] =
-      [];
+    const snapshottedItems: {
+      productId: number;
+      quantity: number;
+      price: number;
+      name: string;
+      stockAfter: number;
+    }[] = [];
 
     for (const item of items) {
       if (
@@ -111,6 +117,9 @@ router.post('/', requireAuth, async (req, res) => {
         quantity: item.quantity,
         price,
         name: product.name,
+        // Exact, not approximate: the row is locked, so nothing else can
+        // move the count between this read and the UPDATE below.
+        stockAfter: product.stock - item.quantity,
       });
 
       await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [
@@ -138,6 +147,16 @@ router.post('/', requireAuth, async (req, res) => {
          VALUES ($1, $2, $3, $4)`,
         [order.id, item.productId, item.quantity, item.price.toFixed(2)]
       );
+      // The ledger row for the decrement above, in the same transaction, so
+      // the admin sees "-2, order #42" beside the number and not just "10".
+      await recordStockAdjustment(client, {
+        productId: item.productId,
+        delta: -item.quantity,
+        newStock: item.stockAfter,
+        source: 'order',
+        userId: req.user!.userId,
+        note: `Order #${order.id}`,
+      });
     }
 
     await client.query('COMMIT');
@@ -329,13 +348,26 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
     }
 
     if (status === 'cancelled') {
-      await client.query(
+      const restored = await client.query(
         `UPDATE products p
          SET stock = p.stock + oi.quantity
          FROM order_items oi
-         WHERE oi.order_id = $1 AND oi.product_id = p.id`,
+         WHERE oi.order_id = $1 AND oi.product_id = p.id
+         RETURNING p.id AS product_id, oi.quantity, p.stock`,
         [orderId]
       );
+      // One ledger row per line restored. The goods came back, and a number
+      // moving up needs the same explanation as one moving down.
+      for (const row of restored.rows) {
+        await recordStockAdjustment(client, {
+          productId: row.product_id,
+          delta: row.quantity,
+          newStock: row.stock,
+          source: 'cancel',
+          userId: req.user!.userId,
+          note: `Order #${orderId} cancelled`,
+        });
+      }
     }
 
     const updated = await client.query(

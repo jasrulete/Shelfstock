@@ -6,6 +6,7 @@ import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import { Product, ProductsResponse } from '@/types';
 import Pagination from '@/components/Pagination';
+import StockControl from '@/components/admin/StockControl';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { Input, Textarea } from '@/components/ui/Field';
@@ -76,6 +77,21 @@ export default function AdminProductsPage() {
 
   function patchForm(patch: Partial<ProductForm>) {
     setForm((prev) => ({ ...prev, ...patch }));
+  }
+
+  /**
+   * A stepper press changed this product's count. Reflect it in the table,
+   * and in the edit form if that product is open there - otherwise saving the
+   * form would PUT the stale number back and quietly undo the press.
+   */
+  function patchProductStock(id: number, stock: number) {
+    setData(
+      (prev) =>
+        prev && { ...prev, products: prev.products.map((p) => (p.id === id ? { ...p, stock } : p)) }
+    );
+    if (editingId === id) {
+      setForm((prev) => ({ ...prev, stock: String(stock) }));
+    }
   }
 
   function loadGallery(productId: number) {
@@ -322,8 +338,13 @@ export default function AdminProductsPage() {
                     <td className="p-2">{product.name}</td>
                     <td className="p-2">{product.category}</td>
                     <td className="p-2">${Number(product.price).toFixed(2)}</td>
-                    <td className={`p-2 ${product.stock === 0 ? 'font-semibold text-red-700' : ''}`}>
-                      {product.stock}
+                    <td className="p-2">
+                      <StockControl
+                        productId={product.id}
+                        productName={product.name}
+                        stock={product.stock}
+                        onStockChange={(stock) => patchProductStock(product.id, stock)}
+                      />
                     </td>
                     <td className="p-2 text-right">
                       <div className="flex justify-end gap-1">
