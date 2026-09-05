@@ -302,15 +302,26 @@ router.get('/:id', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    // The line barcodes are what the companion's pack screen matches scans
+    // against (Roadmap 3.5). Admin-only, like the column everywhere else
+    // (INV-8): the SQL asks for it only for an admin, and the row is stripped
+    // regardless, so a wider projection can never leak it to a customer.
+    const isAdmin = req.user!.role === 'admin';
     const itemsResult = await pool.query(
-      `SELECT oi.*, p.name AS product_name
+      `SELECT oi.*, p.name AS product_name${isAdmin ? ', p.barcode' : ''}
        FROM order_items oi
        JOIN products p ON p.id = oi.product_id
        WHERE oi.order_id = $1`,
       [order.id]
     );
+    const items = itemsResult.rows.map((row) => {
+      if (isAdmin) return row;
+      const rest = { ...row };
+      delete rest.barcode;
+      return rest;
+    });
 
-    res.json(withTransitions({ ...order, items: itemsResult.rows }));
+    res.json(withTransitions({ ...order, items }));
   } catch (err) {
     console.error('Get order error:', err);
     res.status(500).json({ error: 'Failed to fetch order' });
@@ -336,6 +347,11 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
   const status = req.body?.status as OrderStatus | undefined;
   if (!status || !ORDER_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${ORDER_STATUSES.join(', ')}` });
+  }
+  // Optional. The pack screen's "Ship anyway" sends what it skipped.
+  const note = req.body?.note;
+  if (note !== undefined && note !== null && (typeof note !== 'string' || note.length > 200)) {
+    return res.status(400).json({ error: 'note must be a string of at most 200 characters' });
   }
 
   const client = await pool.connect();
@@ -387,6 +403,12 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
 
     await client.query('COMMIT');
     const updatedOrder = updated.rows[0];
+    if (typeof note === 'string' && note.trim()) {
+      // There is no column for this and adding one needs a migration, so
+      // for now it is one line in the server log - the same place CSP
+      // reports go - never stored, never echoed back.
+      console.warn(`Order #${orderId} -> ${status} with pack note: ${note.trim()}`);
+    }
     // With the transitions now allowed from the NEW status, so the phone can
     // redraw its buttons from this response without a refetch.
     res.json(withTransitions(updatedOrder));
