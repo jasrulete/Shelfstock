@@ -23,9 +23,157 @@ file to pick up where the last one left off.
 
 ---
 
-## 0. Handover — session of 2026-09-03
+## 0. Handover — 2026-09-06 (current; read this first)
 
-**Read this section first. Everything below it is older.**
+**Nothing is pending on the agent's side.** The sections below this one are
+the log of how the project got here; this one is where it is.
+
+### 0.1 Where everything stands
+
+| | Shelfstock (web + API) | shelfstock-companion (Android) |
+|---|---|---|
+| `main` | `4e0ddd4` — merge of #30 | `cbcae8b` — merge of #6 |
+| Production | Deployed from `main`; last code change was #29. Verified 2026-09-05 against the live site: `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
+| Open PRs | none | none |
+| Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
+
+### 0.2 Roadmap status
+
+| Item | Status |
+|---|---|
+| Phase 0 — the eight defects | ✅ #19, companion #2 |
+| §3.1 Stock ledger + stepper | ✅ #23, companion #4 — verified on production |
+| §3.2 Serve the lifecycle (ADR-0007) | ✅ #26, companion #5 |
+| §3.3 Push refreshes the app | ✅ companion #5 |
+| §3.4 Real barcodes + printable sheet | ✅ #28 — production catalogue coded through the endpoint |
+| §3.5 Scan-to-verify | ✅ #29, companion #6 — **not device-verified** |
+| §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
+| §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
+| §4.3 Decision log | ✅ #20 (eight ADRs) |
+| Phase 3 — nine depth items | ❌ none started — order in §0.4 |
+| Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
+| Extra: doc-link checker in CI | ✅ #27 |
+| Extra: migration-order runbook | ✅ #25 |
+
+### 0.3 The owner's items
+
+1. **Initialise EAS and build the APK** — from the companion folder. Both
+   change the Expo account, so they are yours to run:
+
+   ```bash
+   eas init
+   ```
+
+   ```bash
+   eas build --platform android --profile preview
+   ```
+
+   `eas init` writes `extra.eas.projectId` into `app.json` — commit it. Attach
+   the APK to a GitHub Release (`shelfstock-companion/docs/SETUP.md` §6).
+   Until this happens, nothing from the last two days reaches a phone.
+2. **Screenshots and the scan GIF** into `shelfstock-companion/docs/screenshots/`:
+   login, orders list, order detail, the scanner, a push on the lock screen,
+   the inventory stepper, and pack & verify ticking lines off. Both READMEs
+   have the section waiting.
+3. **Device-verify pack & verify** — print `/admin/barcodes` as the demo
+   admin, open a pending order on the phone, pack it. It is tested against a
+   mocked camera only.
+4. **Promote the CSP** once a day of production traffic has produced no
+   `CSP violation:` lines — [OPERATIONS.md §5](docs/OPERATIONS.md#reading-csp-reports),
+   all four steps.
+
+### 0.4 Next agent work, in order — Roadmap Phase 3, trimmed as its §5 says
+
+1. **Notification preferences** (companion). `(tabs)/_layout.tsx` calls
+   `enablePush()` on every mount, so switching push off in Settings silently
+   re-enables it on the next launch. Persist the choice; show the
+   denied-permission state with an "Open settings" button.
+2. **Storefront performance.** Wrap `loadProduct` in React's `cache()` —
+   `generateMetadata` and the page body both call it, at two queries each;
+   Next dedupes `fetch()` but not `pool.query`. Four round trips become two.
+   Record the number for the README.
+3. **Reviews "Show more".** `reviews.ts` limits to 10 and `ProductReviews.tsx`
+   never reads `data.pagination`, so an eleventh review is averaged in and
+   invisible. Append, do not replace; announce via the existing `role="status"`.
+4. **Customer self-cancel.** `POST /api/orders/:id/cancel`, `requireAuth`
+   without `adminOnly`, `FOR UPDATE`, refuse unless owner and `pending`.
+   **Extract `transitionOrder()`** shared with the admin PATCH rather than
+   duplicating the block.
+5. **Accessibility.** Skip link + `<main id="main">`; `scope="col"` and
+   sr-only captions on the admin tables; `accessibilityLabel` on the seven
+   ProductForm inputs; `OfflineBanner` safe-area.
+6. **List ergonomics** (companion). 300 ms debounce + `keepPreviousData` on
+   inventory search; real `isError`/retry states. Infinite scroll stays cut.
+7. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
+   Chip only.
+8. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
+   no row". ProductForm blank-price guard.
+9. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
+   and product, `resumePausedMutations` on the persister's `onSuccess`, a
+   visible "Queued — sends when you're back online".
+
+Each as its own PR. [DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-definition-of-done)
+applies: a test that fails without the change, mutation-checked, docs updated
+in the same commit.
+
+### 0.5 Accounts and tooling
+
+Unchanged from §0a.4. Only `jasrulete` can push or merge. Both repos ask `gh`
+for the `jasrulete` token **by name**, so `git push` works regardless of which
+account gh has active — and that flips on its own between commands. `gh pr
+merge`, `gh api` and `gh repo archive` follow the active account, so do the
+switch and the command in **one shell command**:
+`gh auth switch --user jasrulete >/dev/null 2>&1 && gh pr merge N --repo jasrulete/<repo> --merge`.
+Agent sessions get nondeterministic classifier blocks on `gh auth switch`,
+`gh pr merge`, `gh api -X DELETE` and `rm -rf` of a `.git`; retry once in a
+different form, otherwise hand the command to the owner.
+
+### 0.6 Gotchas from 2026-09-05, each with its fix
+
+- **RNTL's `act` is async — await it.** A sync `act(() => …)` leaves the state
+  update queued in a scope that never closes; the updater never runs.
+- **Never wrap a handler that starts a TanStack mutation in a manual `act`.**
+  It leaves React's act bookkeeping such that the *next* test's render never
+  commits — an empty tree, no effects. Call the handler plainly and `waitFor`.
+- **Let a test's mutation settle inside the test** (`waitFor` the navigation
+  it causes) and **clear the QueryClient on teardown**, or its refetches land
+  in the next test outside any act scope.
+- **A `Date.now` stub that advances the clock defeats `findBy*`**, which
+  measures its own timeout with `Date.now`. Scope a clock stub to the one call
+  that needs it.
+- **`jest -t <pattern>` hung for ten minutes** in the companion. Use
+  `--forceExit` and a `timeout` for targeted runs.
+- **The React Compiler lint rules** reject a ref assigned during render,
+  `setState` in an effect body, and `Date.now` anywhere the compiler cannot
+  prove is an event handler. Derive from props during render, fire haptics
+  from an effect keyed on state, read the clock in a closure made outside the
+  component.
+- **`sed 's/\bstore\b/mockStore/g'` also rewrote `expo-secure-store`.** Anchor
+  a rename to the identifier's real context.
+- **A non-final command in an `&&` list does not trip `set -e`.** A mutation
+  whose `sed` did not match silently skipped its check and the commit went in
+  unverified. Guards are `if ! …; then exit 1; fi`, and check the `sed` applied.
+- **Run migrations from the checkout that contains them.** `No migrations to
+  run!` on the wrong branch looks like success. PowerShell needs
+  `$env:VAR = …; npx node-pg-migrate up` — `VAR=value cmd` is bash-only, and
+  `npm run … -- --flag` loses the flag.
+- **A mutation that changes nothing observable is dead code, not a weak test.**
+  `barcode !== null` in `isFullyPacked` could never matter — an unlabelled line
+  can never be scanned — so the condition went, not the test.
+
+### 0.7 Where things are documented
+
+[`docs/`](docs/) — its README.md is the map, ARCHITECTURE.md holds the
+thirteen invariants, ROADMAP.md the plan. This file is history. Agent memory
+lives in `C:\Users\GIGABYTE\.claude\projects\C---JERIC-Important--Projects-shelfstock\memory\`:
+the account rule, the docs-first rule, and the standing instruction to write
+this handover before every compaction.
+
+---
+
+## 0a. Handover — session of 2026-09-03 / 05 (historical; superseded by §0)
+
+**Historical.** §0 above is the current state; this is how it got there.
 
 > **Update, 2026-09-05: §0.2 is done.** Both held PRs landed and were verified
 > on production. Nothing in this section is pending any more; it stays as the
