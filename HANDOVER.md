@@ -27,6 +27,36 @@ file to pick up where the last one left off.
 
 **Read this section first. Everything below it is older.**
 
+> **Update, 2026-09-05: §0.2 is done.** Both held PRs landed and were verified
+> on production. Nothing in this section is pending any more; it stays as the
+> record of how it went, and the rest of §0 reads as written on 2026-09-03.
+>
+> - **The production migration surfaced a two-week-old problem.** The
+>   `password_resets` migration had never applied to production: its
+>   hand-picked prefix sorted before a migration production had already run,
+>   and node-pg-migrate had been refusing every `migrate:up` since 2026-08-17.
+>   Nothing surfaced because the forgot-password route swallows the error by
+>   design. Applied with `--no-check-order`. Runbook entry:
+>   [OPERATIONS.md §6](docs/OPERATIONS.md#not-run-migration-x-is-preceding-already-run-migration-y);
+>   naming rule: [DATA-MODEL.md §3](docs/DATA-MODEL.md#3-migration-rules).
+> - **Run migrations from a checkout that contains the migration.** The first
+>   run happened with the tree on `main`, where the ledger file did not yet
+>   exist, and `No migrations to run!` looked like success. It was not.
+> - **PowerShell needs its own form** of the migrate command — `VAR=value cmd`
+>   is bash-only, and `npm run … -- --flag` loses the flag. Both forms are now
+>   in [OPERATIONS.md §3](docs/OPERATIONS.md#3-migrations).
+> - [#23](https://github.com/jasrulete/Shelfstock/pull/23) merged as `924b09a`,
+>   [companion #4](https://github.com/jasrulete/shelfstock-companion/pull/4)
+>   as `5824139`. Production verified exactly as step 4 below describes: +1
+>   and −1 on product 6 both `200` with ledger rows (ids 1 and 2), history
+>   shows both with the admin's email, a delta beyond the bound `400`, below
+>   zero `409` carrying the current count, anonymous product still has no
+>   `barcode`, anonymous adjust-stock `401`.
+> - The production database password was **rotated** during this, after it
+>   had been pasted into a chat and echoed by a terminal. The old one is dead.
+> - **Still the owner's to do:** step 6, a new companion APK. Installed builds
+>   cannot self-update, so the stepper reaches a phone only through a rebuild.
+
 Two PRs are open and deliberately **held**. Nothing else is pending. The
 sequence to land them is in §0.2 and takes about fifteen minutes, but the
 first step needs a production database credential that only the owner can

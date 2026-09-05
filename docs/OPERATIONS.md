@@ -68,6 +68,22 @@ not the app.
 cd frontend && DATABASE_URL="postgres://..." npm run migrate:up
 ```
 
+The same from **PowerShell**, where `VAR=value command` is not a thing:
+
+```powershell
+cd frontend; $env:DATABASE_URL = "postgres://..."; npx node-pg-migrate up; Remove-Item Env:DATABASE_URL
+```
+
+The trailing `Remove-Item` matters — it clears the variable so nothing else
+run in that window later points at production. And it is `npx node-pg-migrate`
+rather than `npm run migrate:up -- --flag` because PowerShell drops the `--`
+that npm needs to pass a flag through; npm then swallows the flag as one of its
+own and the tool never sees it.
+
+**Run it from a checkout that contains the migration.** `No migrations to
+run!` means every file in `frontend/migrations/` is recorded as applied — it
+says nothing about a migration that only exists on a branch you are not on.
+
 Check what a database is on before changing it:
 
 ```bash
@@ -219,6 +235,36 @@ In order of likelihood:
 
 Expected. `RESEND_API_KEY` is unset everywhere — [KW-6](SECURITY.md#kw-6--transactional-email-may-silently-not-arrive).
 In non-production, a password-reset link is logged to the console instead.
+
+### "Not run migration X is preceding already run migration Y"
+
+node-pg-migrate refuses to apply anything when an **unapplied** migration
+sorts before one the database has **already** run. It is protecting the
+sequence, and it is right to.
+
+It happened on 2026-09-03. `1754200000000_password_resets` was added on
+2026-08-17 with a hand-picked prefix that sorts just after the baseline — and
+therefore *before* `1785843079322_companion_barcode_and_device_tokens`, which
+production had applied on 2026-08-04. Every `migrate:up` against production
+since had been refusing, and **production ran without the `password_resets`
+table for two weeks.** Nothing surfaced because the forgot-password route
+swallows the error and answers the same 200 either way, by design.
+
+CI could not have caught it: a fresh database applies all files in order with
+no conflict. Only a database that ran the later-numbered migration first —
+production, preview — hits it.
+
+The fix, once, is to let it apply the stragglers in order. Safe because every
+migration here is idempotent:
+
+```bash
+cd frontend && DATABASE_URL="postgres://..." npx node-pg-migrate up --no-check-order
+```
+
+Then do not let it recur: a new migration's prefix is `Date.now()` at the
+moment the file is created, never a number chosen to "sort after the baseline"
+([DATA-MODEL.md §3](DATA-MODEL.md#3-migration-rules)). Any prefix lower than
+one production has already run reproduces this.
 
 ## 7. Railway is dead and not coming back
 
