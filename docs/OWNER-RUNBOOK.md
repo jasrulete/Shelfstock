@@ -1,11 +1,10 @@
 # Owner's runbook
 
 The five things only you can do, in the order that works, with what "done"
-looks like for each. Written 2026-09-06 from the repos as they stood:
-Shelfstock `main` at the merge of #42, companion `main` at the merge of #16,
-Shelfstock #41 open and held. Every command was checked against the code,
-the tools' own help, or run here; where something could not be verified it
-says so.
+looks like for each. Written 2026-09-06, and task 1 has since been done:
+Shelfstock `main` is at the merge of #45, the companion at the merge of #17,
+and nothing is held. Every command was checked against the code, the tools'
+own help, or run here; where something could not be verified it says so.
 
 | # | Task | Time | Depends on |
 |---|---|---|---|
@@ -54,8 +53,11 @@ there; say the word and it does that part.
 
 ## 1. Run the production migration, then merge #41
 
-**Done on 2026-09-06.** The migration ran on production, #41 merged as
-`5899b11`, `/api/health` was ok, the malformed-id probe answered 400, and
+**Done on 2026-09-06 — nothing to do here.** The steps are kept for the next
+schema change, and two of them no longer apply as written: the migration file
+is on `main` now, and the branch step 1 checks out was deleted when #41
+merged, so a future change starts from its own branch instead. The migration
+ran on production, #41 merged as `5899b11`, `/api/health` was ok, the malformed-id probe answered 400, and
 the replay proof passed on product 6: the first `+1` wrote ledger row 3
 carrying its request id, the identical request was answered
 `replayed: true` with that same row and wrote nothing, and the `-1` wrote
@@ -339,9 +341,8 @@ push), or Expo Go for everything else: in the companion folder,
 then `npm install; npx expo start` and scan the QR with Expo Go on the same
 wifi. Sign in as the demo admin.
 
-**Do task 1 first if you can.** The relaunch test in section G can, on
-today's server, apply a press twice in one specific timing window; after #41
-is deployed it cannot.
+**Task 1 is done**, so the relaunch test in section G can no longer apply a
+press twice: the server dedupes the replay on the press's `requestId`.
 
 ### Set-up
 
@@ -408,8 +409,9 @@ register push at all.
 | Airplane mode on → open the second pending order (or the one you shipped in A, which still offers **Mark completed**) → change its status | The button waits; the blue banner "1 queued — sends when you're back online" at the top. Airplane mode off → it sends, the banner clears. |
 
 **F. The stepper offline** — airplane mode *first*, then press. A press whose
-request was already sent when the signal dropped is not queued: it reads
-"Not applied: …" and you press again later.
+request was already sent when the signal dropped is sent once more with the
+same id after a short pause; only if that fails too does it read
+"Not applied: …", and then you press again later.
 
 | Step | Expect |
 |---|---|
@@ -423,7 +425,7 @@ queue by design.
 | Step | Expect |
 |---|---|
 | Airplane mode on → press **+** once → wait two seconds → kill the app *while still offline* (swipe it away in recents; for Expo Go, swipe Expo Go away) → airplane mode off → reopen | Briefly "+1 pending", then the count lands on the server's number. |
-| If instead the app is killed within a second *after* reconnecting | Before #41 is deployed this specific timing can apply the press twice (the persisted queue lags the live one by up to a second). After #41 it is answered as a replay. That is the known window, not a new bug. |
+| If instead the app is killed within a second *after* reconnecting | The press is sent again on the next launch — the persisted queue lags the live one by up to a second — and the server answers it as a replay, so the count moves once. Before #41 this was the one window that could double-count. |
 
 **H. A refused press**
 
@@ -616,7 +618,8 @@ says report-only.
 
 Nothing is queued for the agent beyond what each section hands over. The
 roadmap has no Phase 4; the candidates the 2026-09-06 session noted are in
-[HANDOVER.md §0.4](../HANDOVER.md), all now done. If you want more, the honest
-next things are a transport-error retry for stepper presses (safe once #41 is
-live), and the product form's PUT-with-stock hazard named in the companion's
-architecture doc.
+[HANDOVER.md §0](../HANDOVER.md), all now done — including the transport-error
+retry, which shipped as companion #17 once #41 made it safe. The one thing
+still named and not done is the product form's PUT-with-stock hazard in the
+companion's architecture doc: an edit queued alongside stepper presses on the
+same product can land on top of what they moved.

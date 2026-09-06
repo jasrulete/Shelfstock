@@ -49,6 +49,10 @@ busted by app version.
 - **Offline *writes* remain out of scope.** Roadmap Phase 3 keeps only the
   smallest version: paused mutations with a visible "Queued — sends when you're
   back online". A SQLite queue with a background flush was cut.
+  **Superseded 2026-09-06 by [0009](0009-offline-write-queue.md):** offline
+  writes are in scope and shipped, as a persisted mutation queue with an
+  idempotency key for stepper presses. The decision above — products cached
+  offline, orders never — is unchanged.
 
 ## Alternatives considered
 
