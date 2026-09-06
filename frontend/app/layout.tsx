@@ -51,11 +51,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
       <body>
+        {/* Visible only when focused: the first Tab press on any page offers a
+            way past the nav for keyboard and screen-reader users. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:shadow"
+        >
+          Skip to content
+        </a>
         <CurrencyProvider>
           <CartProvider>
             <div className="flex min-h-screen flex-col">
               <NavBar />
-              <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+              <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+                {children}
+              </main>
               <Footer />
             </div>
           </CartProvider>

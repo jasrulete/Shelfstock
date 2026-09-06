@@ -117,14 +117,15 @@ export default function AdminCustomersPage() {
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <caption className="sr-only">Customer accounts: segment, orders placed, total spent, last order and join date</caption>
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                  <th className="p-2 font-medium text-gray-600">Customer</th>
-                  <th className="p-2 font-medium text-gray-600">Segment</th>
-                  <th className="p-2 font-medium text-gray-600">Orders</th>
-                  <th className="p-2 font-medium text-gray-600">Total Spent</th>
-                  <th className="p-2 font-medium text-gray-600">Last Order</th>
-                  <th className="p-2 font-medium text-gray-600">Joined</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Customer</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Segment</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Orders</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Total Spent</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Last Order</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Joined</th>
                 </tr>
               </thead>
               <tbody>

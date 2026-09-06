@@ -310,6 +310,11 @@ npx vitest run --project server      # or just one
 Each behavioural claim above was checked by breaking the production code on
 purpose and confirming the right tests — and only those — went red.
 
+**Markup checks** (`tests/a11y.markup.test.ts`) — read at the source rather
+than rendered: the four admin tables keep a caption and `scope="col"` on every
+header, and the root layout keeps its skip link to `<main id="main">`. A new
+column or table cannot lose them quietly.
+
 **End-to-end smoke test** — the same invariants exercised against the real,
 Dockerized stack (PostgreSQL + the app, no mocks): refusing a malformed email →
 register → checkout → stock decrement → snapshot → cross-user 404 → admin

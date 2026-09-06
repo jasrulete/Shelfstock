@@ -113,15 +113,16 @@ export default function AdminOrdersPage() {
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <caption className="sr-only">Orders: customer, shipping address, total, status and the status update control</caption>
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                  <th className="p-2 font-medium text-gray-600">Order</th>
-                  <th className="p-2 font-medium text-gray-600">Date</th>
-                  <th className="p-2 font-medium text-gray-600">Customer</th>
-                  <th className="p-2 font-medium text-gray-600">Ship to</th>
-                  <th className="p-2 font-medium text-gray-600">Total</th>
-                  <th className="p-2 font-medium text-gray-600">Status</th>
-                  <th className="p-2 font-medium text-gray-600">Update</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Order</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Date</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Customer</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Ship to</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Total</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Status</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Update</th>
                 </tr>
               </thead>
               <tbody>
