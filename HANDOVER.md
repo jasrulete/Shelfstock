@@ -58,6 +58,10 @@ are the log of how the project got here; this one is where it is.
 
 ### 0.3 The owner's items
 
+The step-by-step for every item below, with the exact commands and what
+"done" looks like, is [docs/OWNER-RUNBOOK.md](docs/OWNER-RUNBOOK.md). This
+list is the summary.
+
 1. **Initialise EAS and build the APK** — from the companion folder. Both
    change the Expo account, so they are yours to run:
 
