@@ -366,7 +366,7 @@ const DELTA_MAX = 10_000;
 const NOTE_MAX = 200;
 
 /**
- * POST /api/products/:id/adjust-stock  { delta, source, note? }
+ * POST /api/products/:id/adjust-stock  { delta, source, note?, requestId? }
  *
  * Moves stock by a delta, atomically, and writes the ledger row in the same
  * transaction. This is the only correct way for a client to nudge a count:
@@ -382,13 +382,16 @@ const NOTE_MAX = 200;
  * 'order' and 'cancel' are written only by the server from the routes that
  * actually move stock for those reasons.
  */
+/** A client-made idempotency key (see the migration adding client_request_id). */
+const REQUEST_ID = /^[A-Za-z0-9._-]{8,64}$/;
+
 router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
   const id = parseId(req.params.id);
   if (id === null) {
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  const { delta, source, note } = req.body ?? {};
+  const { delta, source, note, requestId } = req.body ?? {};
   if (!Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > DELTA_MAX) {
     return res
       .status(400)
@@ -401,6 +404,12 @@ router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
     return res.status(400).json({ error: `note must be a string of at most ${NOTE_MAX} characters` });
   }
   const cleanNote = typeof note === 'string' ? note.trim() || null : null;
+  if (requestId !== undefined && requestId !== null && !REQUEST_ID.test(String(requestId))) {
+    return res
+      .status(400)
+      .json({ error: 'requestId must be 8-64 characters: letters, digits, dot, dash or underscore' });
+  }
+  const clientRequestId: string | null = typeof requestId === 'string' ? requestId : null;
 
   const client = await pool.connect();
   try {
@@ -411,6 +420,24 @@ router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
       return res.status(404).json({ error: 'Product not found' });
     }
     const before: number = current.rows[0].stock;
+
+    // A queued companion press replayed after a kill arrives with the id it
+    // was first sent with. Under the same row lock, so a duplicate in flight
+    // waits and then sees the row: answer with what was already written,
+    // and the count as it stands now. Nothing moves, nothing is logged twice.
+    if (clientRequestId !== null) {
+      const seen = await client.query(
+        `SELECT id, product_id, delta, new_stock, source, user_id, note, created_at, client_request_id
+         FROM stock_adjustments
+         WHERE client_request_id = $1`,
+        [clientRequestId]
+      );
+      if (seen.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.json({ stock: before, adjustment: seen.rows[0], replayed: true });
+      }
+    }
+
     const after = before + delta;
     if (after < 0) {
       await client.query('ROLLBACK');
@@ -427,6 +454,7 @@ router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
       source: source as StockSource,
       userId: req.user!.userId,
       note: cleanNote,
+      clientRequestId,
     });
     await client.query('COMMIT');
     res.json({ stock: after, adjustment });

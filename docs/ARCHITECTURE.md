@@ -246,6 +246,14 @@ value** — "read 12, send 13" swallows a concurrent order's decrement. And **th
 server rejects rather than clamps**: a −5 against a stock of 3 is a `409`, not
 a floor at 0 with a ledger row that claims −5.
 
+A third rule since 2026-09-06: **a companion press is applied at most once.**
+The companion's offline queue persists a press with a `requestId` made at
+press time and sends it with every attempt, because its persister's write to
+disk lags the live state by up to a second and an app killed in that window
+after a reconnect replays a press that already landed. `adjust-stock` looks
+the id up under the row lock (`stock_adjustments.client_request_id`, unique
+where not null) and answers a replay with the row it already wrote.
+
 *Enforced by:* `tests/stockLedger.routes.test.ts`, plus one ledger test for
 each order path in `tests/orders.routes.test.ts`. *A fifth path that changes
 stock writes a row, or it does not merge.*

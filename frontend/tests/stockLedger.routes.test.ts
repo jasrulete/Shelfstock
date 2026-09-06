@@ -23,10 +23,14 @@ function txCalls(fragment: string) {
   return clientQuery.mock.calls.filter(([sql]) => (sql as string).includes(fragment));
 }
 
-/** Answers the SELECT ... FOR UPDATE with a stock count; everything else with `rows`. */
-function productWithStock(stock: number | null, rows: unknown[] = [{ id: 1 }]) {
+/**
+ * Answers the SELECT ... FOR UPDATE with a stock count, the requestId lookup
+ * with `seen` (nothing, by default), everything else with `rows`.
+ */
+function productWithStock(stock: number | null, rows: unknown[] = [{ id: 1 }], seen: unknown[] = []) {
   clientQuery.mockImplementation(async (sql: string) => {
     if (sql.includes('FOR UPDATE')) return { rows: stock === null ? [] : [{ stock }] };
+    if (sql.includes('WHERE client_request_id = $1')) return { rows: seen };
     if (sql.includes('INSERT INTO stock_adjustments')) {
       return { rows: [{ id: 99, product_id: 1, delta: 0, new_stock: 0, source: 'x', user_id: 7, note: null, created_at: 'now' }] };
     }
@@ -167,8 +171,81 @@ describe('POST /api/products/:id/adjust-stock', () => {
 
     const ledger = txCalls('INSERT INTO stock_adjustments')[0];
     // product_id, delta, new_stock, source, user_id, note (trimmed)
-    expect(ledger[1]).toEqual([1, 5, 17, 'companion', 7, 'Received from supplier']);
+    expect(ledger[1]).toEqual([1, 5, 17, 'companion', 7, 'Received from supplier', null]);
     expect(sql.indexOf(update[0])).toBeLessThan(sql.indexOf(ledger[0]));
+  });
+
+  it('stores the requestId with the ledger row, and looks for it under the row lock first', async () => {
+    productWithStock(12);
+
+    const res = await request(app)
+      .post('/api/products/1/adjust-stock')
+      .set('Authorization', admin())
+      .send({ delta: 1, source: 'companion', requestId: 'press-abc-123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.replayed).toBeUndefined();
+    const sql = clientQuery.mock.calls.map(([s]) => s as string);
+    expect(sql[1]).toContain('FOR UPDATE');
+    expect(sql[2]).toContain('WHERE client_request_id = $1');
+    expect(clientQuery.mock.calls[2][1]).toEqual(['press-abc-123']);
+    const ledger = txCalls('INSERT INTO stock_adjustments')[0];
+    expect(ledger[1]).toEqual([1, 1, 13, 'companion', 7, null, 'press-abc-123']);
+  });
+
+  it('answers a replayed requestId with the row it already wrote: nothing moves, nothing is logged twice', async () => {
+    const written = { id: 55, product_id: 1, delta: 1, new_stock: 13, source: 'companion', user_id: 7, note: null, created_at: 'then', client_request_id: 'press-abc-123' };
+    productWithStock(15, [{ id: 1 }], [written]);
+
+    const res = await request(app)
+      .post('/api/products/1/adjust-stock')
+      .set('Authorization', admin())
+      .send({ delta: 1, source: 'companion', requestId: 'press-abc-123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ stock: 15, adjustment: written, replayed: true });
+    expect(txCalls('UPDATE products')).toHaveLength(0);
+    expect(txCalls('INSERT INTO stock_adjustments')).toHaveLength(0);
+    expect(clientQuery).toHaveBeenLastCalledWith('ROLLBACK');
+  });
+
+  it('a replay is answered before the below-zero check: a press that already landed cannot be refused', async () => {
+    const written = { id: 56, product_id: 1, delta: -1, new_stock: 0, source: 'companion', user_id: 7, note: null, created_at: 'then', client_request_id: 'press-def-456' };
+    productWithStock(0, [{ id: 1 }], [written]);
+
+    const res = await request(app)
+      .post('/api/products/1/adjust-stock')
+      .set('Authorization', admin())
+      .send({ delta: -1, source: 'companion', requestId: 'press-def-456' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.replayed).toBe(true);
+    expect(res.body.stock).toBe(0);
+  });
+
+  it('rejects a malformed requestId with 400 before opening a transaction', async () => {
+    const res = await request(app)
+      .post('/api/products/1/adjust-stock')
+      .set('Authorization', admin())
+      .send({ delta: 1, source: 'companion', requestId: 'no spaces allowed' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/requestId/);
+    expect(poolConnect).not.toHaveBeenCalled();
+  });
+
+  it('a press without a requestId writes NULL and is never a replay', async () => {
+    productWithStock(12, [{ id: 1 }], [{ id: 1 }]);
+
+    const res = await request(app)
+      .post('/api/products/1/adjust-stock')
+      .set('Authorization', admin())
+      .send({ delta: 1, source: 'web-admin' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.replayed).toBeUndefined();
+    expect(txCalls('WHERE client_request_id')).toHaveLength(0);
+    expect(txCalls('INSERT INTO stock_adjustments')[0][1][6]).toBeNull();
   });
 
   it('stores a blank note as NULL', async () => {
@@ -179,7 +256,7 @@ describe('POST /api/products/:id/adjust-stock', () => {
       .set('Authorization', admin())
       .send({ delta: -1, source: 'web-admin', note: '   ' });
 
-    expect(txCalls('INSERT INTO stock_adjustments')[0][1]).toEqual([1, -1, 0, 'web-admin', 7, null]);
+    expect(txCalls('INSERT INTO stock_adjustments')[0][1]).toEqual([1, -1, 0, 'web-admin', 7, null, null]);
   });
 });
 
@@ -231,7 +308,7 @@ describe('PUT /api/products/:id and the ledger', () => {
     expect(res.status).toBe(200);
     const ledger = txCalls('INSERT INTO stock_adjustments');
     expect(ledger).toHaveLength(1);
-    expect(ledger[0][1]).toEqual([1, 3, 8, 'web-admin', 7, 'Set to 8 in the product form']);
+    expect(ledger[0][1]).toEqual([1, 3, 8, 'web-admin', 7, 'Set to 8 in the product form', null]);
     expect(clientQuery.mock.calls.at(-1)?.[0]).toBe('COMMIT');
   });
 

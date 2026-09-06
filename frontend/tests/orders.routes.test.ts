@@ -193,7 +193,7 @@ describe('POST /api/orders and the stock ledger', () => {
     const ledger = txCall('INSERT INTO stock_adjustments')!;
     expect(ledger).toBeDefined();
     // product_id, delta, new_stock (5 - 2, read under the lock), source, user, note
-    expect(ledger[1]).toEqual([7, -2, 3, 'order', 1, 'Order #42']);
+    expect(ledger[1]).toEqual([7, -2, 3, 'order', 1, 'Order #42', null]);
 
     const sql = clientQuery.mock.calls.map(([s]) => s as string);
     expect(sql.findIndex((s) => s.includes('INSERT INTO orders'))).toBeLessThan(sql.indexOf(ledger[0]));
@@ -339,7 +339,7 @@ describe('POST /api/orders/:id/cancel (customer self-cancel)', () => {
     expect(res.body.status).toBe('cancelled');
     expect(res.body.allowed_transitions).toEqual([]);
     expect(txCall('stock = p.stock + oi.quantity')![1]).toEqual([5]);
-    expect(txCall('INSERT INTO stock_adjustments')![1]).toEqual([7, 2, 5, 'cancel', 2, 'Order #5 cancelled by the customer']);
+    expect(txCall('INSERT INTO stock_adjustments')![1]).toEqual([7, 2, 5, 'cancel', 2, 'Order #5 cancelled by the customer', null]);
     expect(txCall('UPDATE orders SET status')![1]).toEqual(['cancelled', 5]);
     expect(clientQuery).toHaveBeenLastCalledWith('COMMIT');
   });
@@ -597,8 +597,8 @@ describe('PATCH /api/orders/:id/status', () => {
     expect(res.status).toBe(200);
     const ledger = clientQuery.mock.calls.filter(([s]) => (s as string).includes('INSERT INTO stock_adjustments'));
     expect(ledger.map(([, params]) => params)).toEqual([
-      [7, 2, 5, 'cancel', 1, 'Order #5 cancelled'],
-      [8, 1, 1, 'cancel', 1, 'Order #5 cancelled'],
+      [7, 2, 5, 'cancel', 1, 'Order #5 cancelled', null],
+      [8, 1, 1, 'cancel', 1, 'Order #5 cancelled', null],
     ]);
     const sql = clientQuery.mock.calls.map(([s]) => s as string);
     expect(sql.lastIndexOf(ledger[1][0] as string)).toBeLessThan(sql.indexOf('COMMIT'));
