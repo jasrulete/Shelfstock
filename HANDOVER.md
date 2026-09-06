@@ -32,8 +32,8 @@ the log of how the project got here; this one is where it is.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #38 (winback tests + this refresh); before it #35 accessibility, #34 self-cancel, #33, #32 | the merge of #11 (blank-price guard); before it #10 low-stock chip, #9 list ergonomics, #8 accessibility, #7 notification preferences |
-| Production | Vercel deploys `main` automatically, so #32–#35 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
+| `main` | the merge of #39 (this refresh); code last changed by #38 winback tests, #35 accessibility, #34 self-cancel, #33 reviews, #32 cache | the merge of #12 (offline write queue, step 1); before it #11 blank-price guard, #10 low-stock chip, #9 list ergonomics, #8 accessibility, #7 notification preferences |
+| Production | Vercel deploys `main` automatically, so #32–#38 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
 | Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
 
@@ -50,7 +50,7 @@ the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | 🟡 5 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard). Remaining one in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
+| Phase 3 — nine depth items | ✅ complete 2026-09-06: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard), offline write queue step 1 (companion #12). Self-cancel is **not production-verified** (needs a customer account; try it from `/orders`), and none of the companion work is device-verified until an APK exists (§0.3). |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -82,30 +82,29 @@ the log of how the project got here; this one is where it is.
    `CSP violation:` lines — [OPERATIONS.md §5](docs/OPERATIONS.md#reading-csp-reports),
    all four steps.
 
-### 0.4 Next agent work, in order — Roadmap Phase 3, trimmed as its §5 says
+### 0.4 Next agent work
 
-Done on 2026-09-06, each as its own PR: notification preferences (companion
-#7), storefront `cache()` (#32), reviews "Show more" (#33), customer
-self-cancel (#34 — `server/orderTransitions.ts` is now the one place an
-order's status changes; the admin PATCH and the customer cancel are thin
-callers), accessibility (#35: skip link, `<main id="main">`, a caption and
-`scope="col"` on the four admin tables, pinned at the source by
-`tests/a11y.markup.test.ts`; companion #8: `accessibilityLabel` on the seven
-ProductForm inputs, `OfflineBanner` padded by the top inset and announced as
-an alert), list ergonomics (companion #9: `useDebouncedValue(search, 300)`
-in front of `useProducts`, `placeholderData: keepPreviousData`, an alert bar
-with Retry on a failed load; infinite scroll stays cut), low-stock chip
-(companion #10: `src/api/analytics.ts` reads `GET /api/analytics/low-stock`,
-the inventory tab shows "N low on stock" when N > 0, and `useAdjustStock`
-invalidates `['low-stock']` so the chip follows the stepper), tests (#38:
-`tests/winback.test.ts` pins the `NOT EXISTS` dedup, the 60–120 day window,
-the cap, and that a row is inserted only when Resend accepted the send;
-companion #11: a blank price is refused — `Number('')` is `0` and the form
-was submitting the product as free). What is left:
+**Phase 3 is complete (§0.2), and the roadmap has no Phase 4.** Nothing is
+queued for the agent. What remains is the owner's list in §0.3: the EAS
+build, the screenshots and scan GIF, device verification of pack & verify
+and of the companion work from 2026-09-06, and the CSP promotion.
 
-1. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
-   and product, `resumePausedMutations` on the persister's `onSuccess`, a
-   visible "Queued — sends when you're back online".
+If more agent work is wanted after that, these are the candidates the
+2026-09-06 session noted while working, in the order it would take them.
+None is committed to:
+
+1. **Verify self-cancel on production** with a throwaway customer account
+   (register, order, cancel from `/orders`, check the ledger row in
+   `/admin/products` stock history). No code expected.
+2. **Offline write queue, step 2 — the stock stepper.** It is deliberately
+   outside step 1: its optimistic count would drift from the shelf while
+   offline, and the server's `adjust-stock` is a delta, so a queued press is
+   safe to replay but the row must not claim a number it has not seen.
+3. **Blank stock in ProductForm.** The same `Number('')` shape as the price:
+   a blank stock submits as 0. It is the field's default anyway, so it was
+   left alone; a guard is a one-line change with a one-case test.
+4. **The pre-existing lint warning** in the companion's `src/api/types.ts`
+   (an unused generic `T`), the only warning in either repo.
 
 Each as its own PR. [DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-definition-of-done)
 applies: a test that fails without the change, mutation-checked, docs updated
@@ -154,6 +153,16 @@ different form, otherwise hand the command to the owner.
   parentheses form a group, so jest looks for `src/app/tabs/…`, finds no
   file, and a grep for the summary line shows nothing at all. Pass a bare
   name such as `npx jest inventory.test`.
+- **`jest` prints `N failed, N total` with no `passed` segment when every
+  test in the run fails.** A grep for `failed, N passed` then finds nothing
+  and a mutant looks uncaught. Match on `failed` alone.
+- **A bare `QueryClient` never resumes a paused mutation.** Mounting (which
+  `QueryClientProvider` does in the app) is what subscribes it to the online
+  manager; a test that toggles `onlineManager` on an unmounted client hangs
+  on the `await`. And two resumers race: an explicit `resumePausedMutations`
+  next to the mount subscription's own returns early with nothing left to
+  do. Model a launch as already online, with the persister's `onSuccess`
+  as the one resumer.
 - **A mocked `useRouter` must return one stable object.** `/orders` keys its
   fetch effect on `router`; a fresh object per render refetched after the
   cancel and overwrote the new status, which looked like the page was broken.
