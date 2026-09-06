@@ -317,8 +317,10 @@ column or table cannot lose them quietly.
 
 **End-to-end smoke test** — the same invariants exercised against the real,
 Dockerized stack (PostgreSQL + the app, no mocks): refusing a malformed email →
-register → checkout → stock decrement → snapshot → cross-user 404 → admin
-lifecycle → refusing to cancel a completed order → cancellation stock restore →
+register → checkout → stock decrement → snapshot → cross-user 404 → customer
+self-cancel (stranger 404, owner 200 with stock restored, repeat 409) → admin
+lifecycle → self-cancel refused once shipped → refusing to cancel a completed
+order → cancellation stock restore → the ledger row that names the customer →
 analytics.
 
 ```bash

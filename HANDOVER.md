@@ -50,7 +50,7 @@ the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | ✅ complete 2026-09-06: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard), offline write queue step 1 (companion #12). Self-cancel is **not production-verified** (needs a customer account; try it from `/orders`), and none of the companion work is device-verified until an APK exists (§0.3). |
+| Phase 3 — nine depth items | ✅ complete 2026-09-06: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard), offline write queue step 1 (companion #12). Self-cancel is verified end-to-end on the Dockerized stack (E2E smoke, #40: stranger 404, owner 200 with the unit restored, repeat 409, refused once shipped, admin gets 404 on the customer route, ledger row names the customer) — production itself was left untouched. None of the companion work is device-verified until an APK exists (§0.3). |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -89,22 +89,16 @@ queued for the agent. What remains is the owner's list in §0.3: the EAS
 build, the screenshots and scan GIF, device verification of pack & verify
 and of the companion work from 2026-09-06, and the CSP promotion.
 
-If more agent work is wanted after that, these are the candidates the
-2026-09-06 session noted while working, in the order it would take them.
-None is committed to:
+The four candidates noted on 2026-09-06 were then taken up the same day on
+the owner's "do the next steps":
 
-1. **Verify self-cancel on production** with a throwaway customer account
-   (register, order, cancel from `/orders`, check the ledger row in
-   `/admin/products` stock history). No code expected.
-2. **Offline write queue, step 2 — the stock stepper.** It is deliberately
-   outside step 1: its optimistic count would drift from the shelf while
-   offline, and the server's `adjust-stock` is a delta, so a queued press is
-   safe to replay but the row must not claim a number it has not seen.
-3. **Blank stock in ProductForm.** The same `Number('')` shape as the price:
-   a blank stock submits as 0. It is the field's default anyway, so it was
-   left alone; a guard is a one-line change with a one-case test.
-4. **The pre-existing lint warning** in the companion's `src/api/types.ts`
-   (an unused generic `T`), the only warning in either repo.
+1. **Verify self-cancel** — done as E2E coverage on the Dockerized stack
+   (#40) rather than against production, which needs no test accounts.
+2. **Offline write queue, step 2 — the stock stepper** — in progress; see
+   the companion PR that references this line, or §0.2 once merged.
+3. **Blank stock in ProductForm** — done, companion #13.
+4. **The lint warning** in `src/api/types.ts` — done, companion #14; both
+   repos now lint with 0 problems.
 
 Each as its own PR. [DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-definition-of-done)
 applies: a test that fails without the change, mutation-checked, docs updated
