@@ -23,6 +23,8 @@ export interface StockAdjustmentRow {
   user_id: number | null;
   note: string | null;
   created_at: string;
+  /** The client's idempotency key for a queued companion press; null for every other path. */
+  client_request_id: string | null;
 }
 
 export interface StockAdjustmentEntry {
@@ -32,6 +34,8 @@ export interface StockAdjustmentEntry {
   source: StockSource;
   userId: number | null;
   note?: string | null;
+  /** See StockAdjustmentRow.client_request_id. The unique index makes a duplicate an INSERT error, not a second row. */
+  clientRequestId?: string | null;
 }
 
 /**
@@ -47,10 +51,18 @@ export async function recordStockAdjustment(
   entry: StockAdjustmentEntry
 ): Promise<StockAdjustmentRow> {
   const { rows } = await client.query(
-    `INSERT INTO stock_adjustments (product_id, delta, new_stock, source, user_id, note)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, product_id, delta, new_stock, source, user_id, note, created_at`,
-    [entry.productId, entry.delta, entry.newStock, entry.source, entry.userId, entry.note ?? null]
+    `INSERT INTO stock_adjustments (product_id, delta, new_stock, source, user_id, note, client_request_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, product_id, delta, new_stock, source, user_id, note, created_at, client_request_id`,
+    [
+      entry.productId,
+      entry.delta,
+      entry.newStock,
+      entry.source,
+      entry.userId,
+      entry.note ?? null,
+      entry.clientRequestId ?? null,
+    ]
   );
   return rows[0];
 }

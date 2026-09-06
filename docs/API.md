@@ -61,7 +61,7 @@ JWTs are not invalidated by a reset, and mail does not actually send unless
 | GET | `/barcode/:code` | admin | The companion scanner's lookup. `404` when no product carries that code. |
 | POST | `/` | admin | |
 | PUT | `/:id` | admin | See the `images` rule below. A `stock` value also writes a ledger row. |
-| POST | `/:id/adjust-stock` | admin | `{ delta, source, note? }`. Atomic delta under the row lock; writes the ledger row. See [Stock moves by delta](#stock-moves-by-delta). |
+| POST | `/:id/adjust-stock` | admin | `{ delta, source, note?, requestId? }`. Atomic delta under the row lock; writes the ledger row. `requestId` (8–64 chars of `[A-Za-z0-9._-]`) is the companion's idempotency key for a queued press: a request whose id was already written is answered `200 { stock, adjustment, replayed: true }` with the current count and the existing row, and nothing moves. See [Stock moves by delta](#stock-moves-by-delta). |
 | GET | `/:id/stock-history` | admin | Last 20 ledger rows, newest first, with `user_email`. |
 | POST | `/:id/assign-barcode` | admin | Gives the product the store's own EAN-13 — GS1 internal-use prefix `200` + zero-padded id + check digit. **Never overwrites:** `409 { error, barcode }` when one exists. |
 | DELETE | `/:id` | admin | |
