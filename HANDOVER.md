@@ -32,7 +32,7 @@ the log of how the project got here; this one is where it is.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #36 (this handover refresh); code last changed by #35 accessibility, #34 self-cancel, #33, #32 | the merge of #9 (list ergonomics); before it #8 accessibility, #7 notification preferences |
+| `main` | the merge of #37 (this handover refresh); code last changed by #35 accessibility, #34 self-cancel, #33, #32 | the merge of #10 (low-stock chip); before it #9 list ergonomics, #8 accessibility, #7 notification preferences |
 | Production | Vercel deploys `main` automatically, so #32–#35 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
 | Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
@@ -50,7 +50,7 @@ the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | 🟡 5 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9). Remaining three in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
+| Phase 3 — nine depth items | 🟡 5 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10). Remaining two in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -94,15 +94,16 @@ callers), accessibility (#35: skip link, `<main id="main">`, a caption and
 ProductForm inputs, `OfflineBanner` padded by the top inset and announced as
 an alert), list ergonomics (companion #9: `useDebouncedValue(search, 300)`
 in front of `useProducts`, `placeholderData: keepPreviousData`, an alert bar
-with Retry on a failed load; infinite scroll stays cut). What is left, in
-order:
+with Retry on a failed load; infinite scroll stays cut), low-stock chip
+(companion #10: `src/api/analytics.ts` reads `GET /api/analytics/low-stock`,
+the inventory tab shows "N low on stock" when N > 0, and `useAdjustStock`
+invalidates `['low-stock']` so the chip follows the stepper). What is left,
+in order:
 
-1. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
-   Chip only.
-2. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
+1. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
    no row". ProductForm blank-price guard — note `Number('')` is `0`, so today
    a blank price submits as free; the guard is a fix, not just a test.
-3. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
+2. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
    and product, `resumePausedMutations` on the persister's `onSuccess`, a
    visible "Queued — sends when you're back online".
 

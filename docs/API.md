@@ -194,7 +194,7 @@ changing the matrix is a one-file change.
 | GET | `/api/analytics/summary` | admin | |
 | GET | `/api/analytics/revenue-over-time` | admin | |
 | GET | `/api/analytics/top-products` | admin | |
-| GET | `/api/analytics/low-stock` | admin | Not the same as the public `/api/products/low-stock`. |
+| GET | `/api/analytics/low-stock` | admin | Not the same as the public `/api/products/low-stock`. Rows `{ id, name, stock }`, at or under `?threshold` (default 5, max 50), lowest first, at most 20. The companion's inventory tab counts these for its low-stock chip. |
 | GET | `/api/analytics/stale-orders` | admin | |
 | GET | `/api/analytics/customers` | admin | |
 | POST | `/api/csp-report` | public | Browser CSP violation reports. Accepts `application/csp-report` and `application/reports+json`, 50 kB max. Always `204` with an empty body; logs one bounded `CSP violation:` line per report and never echoes anything. |
