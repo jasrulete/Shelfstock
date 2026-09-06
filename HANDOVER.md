@@ -25,17 +25,16 @@ file to pick up where the last one left off.
 
 ## 0. Handover — 2026-09-06 (current; read this first)
 
-**One PR is held for the owner (#41, needs a production migration first);
-nothing else is pending on the agent's side.** The sections below this one
-are the log of how the project got here; this one is where it is.
+**Nothing is pending on the agent's side.** The sections below this one are
+the log of how the project got here; this one is where it is.
 
 ### 0.1 Where everything stands
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #42 (this refresh); before it #40 self-cancel E2E, #39, #38 winback tests, #35, #34, #33, #32 | the merge of #16 (a test for #15); #15 is the offline write queue step 2, the stepper; before it #14 lint, #13 blank-stock guard, #12 step 1, #11, #10, #9, #8, #7 |
-| Production | Vercel deploys `main` automatically, so #32–#40 are live. **#41 is open and must not be merged until its migration has run** (§0.3). Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
-| Open PRs | **#41 — held.** `stock_adjustments.client_request_id` + adjust-stock replay dedupe; CI green; merge only after the migration (§0.3). | none |
+| `main` | the merge of #44 (this refresh); before it #43 owner's runbook, #41 requestId dedupe (migration run and verified on production 2026-09-06), #40 self-cancel E2E, #39, #38, #35, #34, #33, #32 | the merge of #17 (a retry for a lost stepper press, safe now that the server dedupes); before it #16, #15 the stepper's offline queue, #14, #13, #12 step 1, #11, #10, #9, #8, #7 |
+| Production | Vercel deploys `main` automatically, so #32–#43 are live. #41's migration was run by the owner and the replay dedupe verified on production on 2026-09-06 (product 6: `+1` wrote ledger row 3 with its request id, the identical request was answered `replayed: true` with the same row, `-1` wrote row 4). Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
+| Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
 
 ### 0.2 Roadmap status
@@ -51,7 +50,7 @@ are the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | ✅ complete 2026-09-06: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard), offline write queue step 1 (companion #12) and step 2, the stepper (companion #15, #16; server half held as #41). Self-cancel is verified end-to-end on the Dockerized stack (E2E smoke, #40: stranger 404, owner 200 with the unit restored, repeat 409, refused once shipped, admin gets 404 on the customer route, ledger row names the customer) — production itself was left untouched. None of the companion work is device-verified until an APK exists (§0.3). |
+| Phase 3 — nine depth items | ✅ complete 2026-09-06: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard), offline write queue step 1 (companion #12) and step 2, the stepper (companion #15, #16, #17; server half #41, live and verified on production). Self-cancel is verified end-to-end on the Dockerized stack (E2E smoke, #40: stranger 404, owner 200 with the unit restored, repeat 409, refused once shipped, admin gets 404 on the customer route, ledger row names the customer) — production itself was left untouched. None of the companion work is device-verified until an APK exists (§0.3). |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -83,20 +82,10 @@ list is the summary.
 3. **Device-verify pack & verify** — print `/admin/barcodes` as the demo
    admin, open a pending order on the phone, pack it. It is tested against a
    mocked camera only.
-4. **Run the `client_request_id` migration on production, then merge #41.**
-   The companion now sends a `requestId` with every stepper press so a press
-   replayed after a kill is applied once; #41 is the server half and reads
-   the new column, and Vercel deploys `main` on merge, so the column must
-   exist first. From `frontend/`, with the production `DATABASE_URL` in the
-   environment as the runbook in [OPERATIONS.md](docs/OPERATIONS.md) shows
-   (never paste it into chat):
-   `npx node-pg-migrate up --no-check-order` → expect
-   `1788669665419_stock_adjustments_client_request_id` to run. Confirm with
-   `SELECT column_name FROM information_schema.columns WHERE table_name =
-   'stock_adjustments' AND column_name = 'client_request_id';` then merge
-   #41 and delete `claude/adjust-stock-idempotency`. Until then the server
-   ignores the id, which is harmless, and the replay window described in the
-   companion's C-INV-8 is real.
+4. **~~Run the `client_request_id` migration on production, then merge #41~~**
+   — done 2026-09-06 and verified (§0.1). Not confirmed: the same migration
+   on the Neon `preview` branch (runbook task 1 step 6); without it, PR
+   previews fail on every stock move.
 5. **Promote the CSP** once a day of production traffic has produced no
    `CSP violation:` lines — [OPERATIONS.md §5](docs/OPERATIONS.md#reading-csp-reports),
    all four steps.
@@ -104,8 +93,9 @@ list is the summary.
 ### 0.4 Next agent work
 
 **Phase 3 is complete (§0.2), the four follow-ups below are done, and the
-roadmap has no Phase 4.** Nothing is queued for the agent beyond merging #41
-after the owner's migration. What remains is the owner's list in §0.3: the EAS
+roadmap has no Phase 4.** Nothing is queued for the agent; the owner's
+remaining items are in [docs/OWNER-RUNBOOK.md](docs/OWNER-RUNBOOK.md)
+tasks 2–5. What remains is the owner's list in §0.3: the EAS
 build, the screenshots and scan GIF, device verification of pack & verify
 and of the companion work from 2026-09-06, and the CSP promotion.
 
@@ -123,8 +113,9 @@ the owner's "do the next steps":
    presses beside it (`+2 pending`); presses on one product are serialised
    by mutation scope and survive a relaunch; a 409 lands on the count it
    reports. C-INV-8 in the companion's ARCHITECTURE.md is the contract.
-   Named, not done: the ProductForm PUT-with-stock hazard; a transport-error
-   retry once #41 is deployed.
+   With #41 live, a press whose request never got an answer is now sent
+   once more with the same id (companion #17). Named, not done: the
+   ProductForm PUT-with-stock hazard.
 3. **Blank stock in ProductForm** — done, companion #13.
 4. **The lint warning** in `src/api/types.ts` — done, companion #14; both
    repos now lint with 0 problems.
