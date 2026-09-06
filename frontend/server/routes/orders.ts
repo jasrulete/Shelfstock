@@ -8,6 +8,7 @@ import { sendOrderConfirmation, sendOrderShipped } from '../mail';
 import { notifyAdminsNewOrder } from '../push';
 import { afterResponse } from '../afterResponse';
 import { recordStockAdjustment } from '../stockLedger';
+import { transitionOrder } from '../orderTransitions';
 
 const router = Router();
 
@@ -329,6 +330,57 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 /**
+ * POST /api/orders/:id/cancel - a customer cancelling their own order.
+ *
+ * Owner-only, and only while pending: once it has shipped the parcel is on
+ * its way, and cancelling becomes the admin's call through PATCH (a refused
+ * cash-on-delivery parcel). A stranger's order answers 404, not 403, for the
+ * same reason GET does - confirming the id exists is itself a leak.
+ *
+ * Same transitionOrder() as the admin's PATCH, so the stock comes back inside
+ * the same transaction and the ledger row says the customer cancelled it.
+ */
+router.post('/:id/cancel', requireAuth, async (req, res) => {
+  const orderId = parseId(req.params.id);
+  if (orderId === null) {
+    return res.status(404).json({ error: 'Order not found' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await transitionOrder(client, {
+      orderId,
+      to: 'cancelled',
+      actorUserId: req.user!.userId,
+      allowIf: (order) => {
+        if (order.user_id !== req.user!.userId) return { status: 404, error: 'Order not found' };
+        if (order.status !== 'pending') {
+          return {
+            status: 409,
+            error: `Only a pending order can be cancelled; this one is ${order.status}`,
+          };
+        }
+        return null;
+      },
+      cancelNote: (id) => `Order #${id} cancelled by the customer`,
+    });
+    if (!result.ok) {
+      await client.query('ROLLBACK');
+      return res.status(result.status).json({ error: result.error });
+    }
+    await client.query('COMMIT');
+    res.json(withTransitions(result.order));
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Cancel order error:', err);
+    res.status(500).json({ error: 'Failed to cancel order' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * PATCH /api/orders/:id/status - admin-only order lifecycle management.
  *
  * Every change is checked against ALLOWED_TRANSITIONS (see ../orderStatus)
@@ -358,51 +410,20 @@ router.patch('/:id/status', requireAuth, adminOnly, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [
+    // The lock, the matrix, the stock restore and the status write all live
+    // in transitionOrder - shared with the customer's self-cancel above.
+    const result = await transitionOrder(client, {
       orderId,
-    ]);
-    const order = orderResult.rows[0];
-    if (!order) {
+      to: status,
+      actorUserId: req.user!.userId,
+    });
+    if (!result.ok) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Order not found' });
+      return res.status(result.status).json({ error: result.error });
     }
-    if (!canTransition(order.status, status)) {
-      await client.query('ROLLBACK');
-      return res
-        .status(400)
-        .json({ error: `Cannot change an order from ${order.status} to ${status}` });
-    }
-
-    if (status === 'cancelled') {
-      const restored = await client.query(
-        `UPDATE products p
-         SET stock = p.stock + oi.quantity
-         FROM order_items oi
-         WHERE oi.order_id = $1 AND oi.product_id = p.id
-         RETURNING p.id AS product_id, oi.quantity, p.stock`,
-        [orderId]
-      );
-      // One ledger row per line restored. The goods came back, and a number
-      // moving up needs the same explanation as one moving down.
-      for (const row of restored.rows) {
-        await recordStockAdjustment(client, {
-          productId: row.product_id,
-          delta: row.quantity,
-          newStock: row.stock,
-          source: 'cancel',
-          userId: req.user!.userId,
-          note: `Order #${orderId} cancelled`,
-        });
-      }
-    }
-
-    const updated = await client.query(
-      'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
-      [status, orderId]
-    );
 
     await client.query('COMMIT');
-    const updatedOrder = updated.rows[0];
+    const updatedOrder = result.order;
     if (typeof note === 'string' && note.trim()) {
       // There is no column for this and adding one needs a migration, so
       // for now it is one line in the server log - the same place CSP

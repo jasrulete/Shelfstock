@@ -132,6 +132,13 @@ renders the served field, and **no client keeps a copy**
 2026-09-05 after the companion's copy drifted). `tests/orders.routes.test.ts`
 pins the field on all four order responses.
 
+Both writers go through one function. `transitionOrder()` in
+`server/orderTransitions.ts` locks the row, consults the matrix, restores
+stock and writes the ledger rows on a cancellation, then writes the status.
+The admin's `PATCH /:id/status` and the customer's `POST /:id/cancel` (owner
+and `pending` only) are thin callers of it, so there is no second copy of the
+rule to drift (2026-09-06).
+
 ### INV-5 — Schema changes only through ordered, forward-only migrations
 
 `frontend/migrations/`, applied by `node-pg-migrate`, tracked in a

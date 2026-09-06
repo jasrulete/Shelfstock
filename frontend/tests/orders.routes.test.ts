@@ -307,6 +307,81 @@ describe('barcode on order items', () => {
   });
 });
 
+/**
+ * Roadmap Phase 3, customer self-cancel. Owner-only, pending-only, and the
+ * same transition function as the admin's PATCH - so the stock comes back in
+ * the same transaction and the ledger says who cancelled.
+ */
+describe('POST /api/orders/:id/cancel (customer self-cancel)', () => {
+  function lockedOrder(order: { id: number; user_id: number; status: string }) {
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FOR UPDATE')) return { rows: [order] };
+      if (sql.includes('stock = p.stock + oi.quantity')) {
+        return { rows: [{ product_id: 7, quantity: 2, stock: 5 }] };
+      }
+      if (sql.includes('UPDATE orders SET status')) return { rows: [{ ...order, status: 'cancelled' }] };
+      return { rows: [] };
+    });
+  }
+
+  it('requires authentication', async () => {
+    const res = await request(app).post('/api/orders/5/cancel');
+    expect(res.status).toBe(401);
+    expect(poolConnect).not.toHaveBeenCalled();
+  });
+
+  it('lets the owner cancel a pending order: stock comes back, the ledger says who, the row is cancelled', async () => {
+    lockedOrder({ id: 5, user_id: 2, status: 'pending' });
+
+    const res = await request(app).post('/api/orders/5/cancel').set('Authorization', `Bearer ${tokenFor(2)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('cancelled');
+    expect(res.body.allowed_transitions).toEqual([]);
+    expect(txCall('stock = p.stock + oi.quantity')![1]).toEqual([5]);
+    expect(txCall('INSERT INTO stock_adjustments')![1]).toEqual([7, 2, 5, 'cancel', 2, 'Order #5 cancelled by the customer']);
+    expect(txCall('UPDATE orders SET status')![1]).toEqual(['cancelled', 5]);
+    expect(clientQuery).toHaveBeenLastCalledWith('COMMIT');
+  });
+
+  it("answers 404 - not 403 - for someone else's order, and rolls back without touching stock", async () => {
+    lockedOrder({ id: 5, user_id: 2, status: 'pending' });
+
+    const res = await request(app).post('/api/orders/5/cancel').set('Authorization', `Bearer ${tokenFor(3)}`);
+
+    expect(res.status).toBe(404);
+    expect(txCall('stock = p.stock + oi.quantity')).toBeUndefined();
+    expect(txCall('UPDATE orders SET status')).toBeUndefined();
+    expect(clientQuery).toHaveBeenLastCalledWith('ROLLBACK');
+  });
+
+  it('refuses once the order has shipped, with 409 and no change', async () => {
+    lockedOrder({ id: 5, user_id: 2, status: 'shipped' });
+
+    const res = await request(app).post('/api/orders/5/cancel').set('Authorization', `Bearer ${tokenFor(2)}`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/pending/);
+    expect(txCall('stock = p.stock + oi.quantity')).toBeUndefined();
+    expect(clientQuery).toHaveBeenLastCalledWith('ROLLBACK');
+  });
+
+  it("is not an admin back door: an admin cancels other people's orders through PATCH", async () => {
+    lockedOrder({ id: 5, user_id: 2, status: 'pending' });
+
+    const res = await request(app).post('/api/orders/5/cancel').set('Authorization', `Bearer ${tokenFor(1, 'admin')}`);
+
+    expect(res.status).toBe(404);
+    expect(clientQuery).toHaveBeenLastCalledWith('ROLLBACK');
+  });
+
+  it('404s a malformed id without opening a transaction', async () => {
+    const res = await request(app).post('/api/orders/abc/cancel').set('Authorization', `Bearer ${tokenFor(2)}`);
+    expect(res.status).toBe(404);
+    expect(poolConnect).not.toHaveBeenCalled();
+  });
+});
+
 describe('GET /api/orders/:id (row-level authorization)', () => {
   const order = { id: 9, user_id: 2, total_amount: '10.00', status: 'pending' };
 

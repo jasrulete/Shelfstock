@@ -146,6 +146,9 @@ docker compose down        # stops containers; keeps the database volume
   is a refused parcel. `completed` and `cancelled` are both terminal: a
   delivered, cash-collected order's goods are with the customer, so putting
   them back on the shelf would make the listing disagree with the shelf.
+  Customers can cancel their own order from `/orders` while it is still
+  `pending`; it runs through the same transition code, so the stock comes
+  back and the ledger says who cancelled.
 - **Admin** — sales dashboard (revenue over time, top products), product
   CRUD (`/admin/products`), and order fulfillment (`/admin/orders`).
 - **Password reset** — emailed single-use link, valid for an hour. The token

@@ -32,8 +32,8 @@ the log of how the project got here; this one is where it is.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | `4e0ddd4` — merge of #30 | `cbcae8b` — merge of #6 |
-| Production | Deployed from `main`; last code change was #29. Verified 2026-09-05 against the live site: `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
+| `main` | the merge of #34 (customer self-cancel); before it #33, #32, #31 | `5c1bd21` — merge of #7 (notification preferences) |
+| Production | Vercel deploys `main` automatically, so #32–#34 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
 | Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
 
@@ -50,7 +50,7 @@ the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | ❌ none started — order in §0.4 |
+| Phase 3 — nine depth items | 🟡 4 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34). Remaining five in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -84,31 +84,22 @@ the log of how the project got here; this one is where it is.
 
 ### 0.4 Next agent work, in order — Roadmap Phase 3, trimmed as its §5 says
 
-1. **Notification preferences** (companion). `(tabs)/_layout.tsx` calls
-   `enablePush()` on every mount, so switching push off in Settings silently
-   re-enables it on the next launch. Persist the choice; show the
-   denied-permission state with an "Open settings" button.
-2. **Storefront performance.** Wrap `loadProduct` in React's `cache()` —
-   `generateMetadata` and the page body both call it, at two queries each;
-   Next dedupes `fetch()` but not `pool.query`. Four round trips become two.
-   Record the number for the README.
-3. **Reviews "Show more".** `reviews.ts` limits to 10 and `ProductReviews.tsx`
-   never reads `data.pagination`, so an eleventh review is averaged in and
-   invisible. Append, do not replace; announce via the existing `role="status"`.
-4. **Customer self-cancel.** `POST /api/orders/:id/cancel`, `requireAuth`
-   without `adminOnly`, `FOR UPDATE`, refuse unless owner and `pending`.
-   **Extract `transitionOrder()`** shared with the admin PATCH rather than
-   duplicating the block.
-5. **Accessibility.** Skip link + `<main id="main">`; `scope="col"` and
+Done on 2026-09-06, each as its own PR: notification preferences (companion
+#7), storefront `cache()` (#32), reviews "Show more" (#33), customer
+self-cancel (#34 — `server/orderTransitions.ts` is now the one place an
+order's status changes; the admin PATCH and the customer cancel are thin
+callers). What is left, in order:
+
+1. **Accessibility.** Skip link + `<main id="main">`; `scope="col"` and
    sr-only captions on the admin tables; `accessibilityLabel` on the seven
    ProductForm inputs; `OfflineBanner` safe-area.
-6. **List ergonomics** (companion). 300 ms debounce + `keepPreviousData` on
+2. **List ergonomics** (companion). 300 ms debounce + `keepPreviousData` on
    inventory search; real `isError`/retry states. Infinite scroll stays cut.
-7. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
+3. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
    Chip only.
-8. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
+4. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
    no row". ProductForm blank-price guard.
-9. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
+5. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
    and product, `resumePausedMutations` on the persister's `onSuccess`, a
    visible "Queued — sends when you're back online".
 
@@ -128,7 +119,27 @@ Agent sessions get nondeterministic classifier blocks on `gh auth switch`,
 `gh pr merge`, `gh api -X DELETE` and `rm -rf` of a `.git`; retry once in a
 different form, otherwise hand the command to the owner.
 
-### 0.6 Gotchas from 2026-09-05, each with its fix
+### 0.6 Gotchas from 2026-09-05 and 06, each with its fix
+
+- **A `grep` pattern that starts with `-` is read as a flag.** `grep -E "->|x"`
+  failed, the `&&` chain skipped the merge, and a `;`-separated cleanup then
+  deleted the unmerged branch and auto-closed companion #7 (recovered from the
+  reflog and reopened). Write `grep -E -e "..."`, and never put a delete after
+  `;` — gate it on the merge result:
+  `m=$(gh api repos/O/R/pulls/N --jq .merged) && [ "$m" = "true" ] && git push --delete …`.
+- **The repo does not use Prettier.** `npx prettier` runs with the defaults
+  (double quotes, width 80) and rewrites whole files into a foreign style;
+  only `eslint` runs in CI. Match the surrounding style by hand and check
+  `git diff --stat` for a file that changed far more than you touched.
+- **The shell hook refuses any command text that looks like an unqualified
+  SQL update**, even a source-code string inside a heredoc. Put such scripts
+  in a file with the Write tool and run the file.
+- **`git checkout -- file` restores HEAD, not "before the mutation".** Used
+  to undo a mutation check on a file with uncommitted work, it wiped the
+  work. Commit first, or `cp` a backup and restore from that.
+- **A mocked `useRouter` must return one stable object.** `/orders` keys its
+  fetch effect on `router`; a fresh object per render refetched after the
+  cancel and overwrote the new status, which looked like the page was broken.
 
 - **RNTL's `act` is async — await it.** A sync `act(() => …)` leaves the state
   update queued in a scope that never closes; the updater never runs.
