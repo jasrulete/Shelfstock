@@ -32,7 +32,7 @@ the log of how the project got here; this one is where it is.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #44 (this refresh); before it #43 owner's runbook, #41 requestId dedupe (migration run and verified on production 2026-09-06), #40 self-cancel E2E, #39, #38, #35, #34, #33, #32 | the merge of #17 (a retry for a lost stepper press, safe now that the server dedupes); before it #16, #15 the stepper's offline queue, #14, #13, #12 step 1, #11, #10, #9, #8, #7 |
+| `main` | the merge of #45 (this refresh); before it #44, #43 owner's runbook, #41 requestId dedupe (migration run and verified on production 2026-09-06), #40 self-cancel E2E, #39, #38, #35, #34, #33, #32 | the merge of #17 (a retry for a lost stepper press, safe now that the server dedupes); before it #16, #15 the stepper's offline queue, #14, #13, #12 step 1, #11, #10, #9, #8, #7 |
 | Production | Vercel deploys `main` automatically, so #32–#43 are live. #41's migration was run by the owner and the replay dedupe verified on production on 2026-09-06 (product 6: `+1` wrote ledger row 3 with its request id, the identical request was answered `replayed: true` with the same row, `-1` wrote row 4). Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
 | Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
@@ -83,9 +83,8 @@ list is the summary.
    admin, open a pending order on the phone, pack it. It is tested against a
    mocked camera only.
 4. **~~Run the `client_request_id` migration on production, then merge #41~~**
-   — done 2026-09-06 and verified (§0.1). Not confirmed: the same migration
-   on the Neon `preview` branch (runbook task 1 step 6); without it, PR
-   previews fail on every stock move.
+   — done 2026-09-06 and verified (§0.1), on the Neon `preview` branch as
+   well (owner's confirmation).
 5. **Promote the CSP** once a day of production traffic has produced no
    `CSP violation:` lines — [OPERATIONS.md §5](docs/OPERATIONS.md#reading-csp-reports),
    all four steps.
