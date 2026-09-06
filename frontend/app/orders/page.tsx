@@ -8,13 +8,15 @@ import { auth } from '@/lib/auth';
 import { api, ApiError } from '@/lib/api';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
 import Card from '@/components/ui/Card';
-import { buttonClasses } from '@/components/ui/Button';
+import Button, { buttonClasses } from '@/components/ui/Button';
 
 export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!auth.isLoggedIn()) {
@@ -29,6 +31,29 @@ export default function OrdersPage() {
       .catch((err: ApiError) => setError(err.message))
       .finally(() => setLoading(false));
   }, [router]);
+
+  async function cancelOrder(order: Order) {
+    if (
+      !window.confirm(
+        `Cancel order #${order.id}? Its stock goes back on the shelf and this cannot be undone.`
+      )
+    )
+      return;
+    setCancelling(order.id);
+    setActionError(null);
+    try {
+      // Owner-only and pending-only server-side; the button is only offered
+      // while pending, and the server's answer is what the card shows.
+      const updated = await api.post<Order>(`/api/orders/${order.id}/cancel`, undefined, {
+        auth: true,
+      });
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: updated.status } : o)));
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'Could not cancel the order');
+    } finally {
+      setCancelling(null);
+    }
+  }
 
   if (loading) return <p className="text-gray-500">Loading orders...</p>;
   if (error)
@@ -50,6 +75,11 @@ export default function OrdersPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Order History</h1>
+      {actionError && (
+        <p role="alert" className="font-medium text-red-700">
+          {actionError}
+        </p>
+      )}
       {orders.map((order) => (
         <Card key={order.id} className="p-4">
           <div className="flex items-center justify-between">
@@ -59,9 +89,22 @@ export default function OrdersPage() {
               </Link>
               <OrderStatusBadge status={order.status} />
             </div>
-            <span className="text-sm text-gray-500">
-              {new Date(order.created_at).toLocaleDateString()}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">
+                {new Date(order.created_at).toLocaleDateString()}
+              </span>
+              {order.status === 'pending' && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={cancelling === order.id}
+                  onClick={() => cancelOrder(order)}
+                >
+                  {cancelling === order.id ? 'Cancelling…' : 'Cancel order'}
+                  <span className="sr-only"> #{order.id}</span>
+                </Button>
+              )}
+            </div>
           </div>
           <ul className="mt-2 space-y-1 text-sm text-gray-600">
             {order.items.map((item) => (

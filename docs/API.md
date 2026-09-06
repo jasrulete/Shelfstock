@@ -137,6 +137,7 @@ from the client's side it is a read-modify-write, so **a stepper must use
 | POST | `/` | user | Create. `{ items: [{ productId, quantity }], shipping: { name, phone, address, city } }` — all four shipping fields required. Max 100 line items. |
 | GET | `/` | admin | All orders. |
 | GET | `/my` | user | The caller's own orders. |
+| POST | `/:id/cancel` | user | The caller cancelling their own order, only while `pending`: stock comes back and a `cancel` ledger row is written in the same transaction, through the same `transitionOrder()` as the admin's PATCH. Someone else's order answers 404 (not 403 — existence is not confirmed, as with GET); one that has shipped or finished answers 409. |
 | GET | `/:id` | user | Own order, or any order for an admin. **An admin's `items[]` carry each line's `barcode`** for the companion's pack screen; a customer's never do (INV-8). |
 | PATCH | `/:id/status` | admin | `{ status, note? }`, checked against the matrix. `note` (≤200 chars) is what the pack screen's "Ship anyway" skipped — **logged server-side, never stored, never echoed**; storing it needs a migration and is deferred. |
 
