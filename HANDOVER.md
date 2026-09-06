@@ -32,7 +32,7 @@ the log of how the project got here; this one is where it is.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #35 (accessibility); before it #34 self-cancel, #33, #32, #31 | the merge of #8 (accessibility); before it #7 notification preferences |
+| `main` | the merge of #36 (this handover refresh); code last changed by #35 accessibility, #34 self-cancel, #33, #32 | the merge of #9 (list ergonomics); before it #8 accessibility, #7 notification preferences |
 | Production | Vercel deploys `main` automatically, so #32–#35 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
 | Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
@@ -50,7 +50,7 @@ the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | 🟡 5 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8). Remaining four in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
+| Phase 3 — nine depth items | 🟡 5 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9). Remaining three in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -92,16 +92,17 @@ callers), accessibility (#35: skip link, `<main id="main">`, a caption and
 `scope="col"` on the four admin tables, pinned at the source by
 `tests/a11y.markup.test.ts`; companion #8: `accessibilityLabel` on the seven
 ProductForm inputs, `OfflineBanner` padded by the top inset and announced as
-an alert). What is left, in order:
+an alert), list ergonomics (companion #9: `useDebouncedValue(search, 300)`
+in front of `useProducts`, `placeholderData: keepPreviousData`, an alert bar
+with Retry on a failed load; infinite scroll stays cut). What is left, in
+order:
 
-1. **List ergonomics** (companion). 300 ms debounce + `keepPreviousData` on
-   inventory search; real `isError`/retry states. Infinite scroll stays cut.
-2. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
+1. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
    Chip only.
-3. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
+2. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
    no row". ProductForm blank-price guard — note `Number('')` is `0`, so today
    a blank price submits as free; the guard is a fix, not just a test.
-4. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
+3. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
    and product, `resumePausedMutations` on the persister's `onSuccess`, a
    visible "Queued — sends when you're back online".
 
@@ -148,6 +149,10 @@ different form, otherwise hand the command to the owner.
 - **The companion's Testing Library is the async one: `await fireEvent.…` as
   well as `await render`.** An un-awaited `changeText` left the controlled
   input empty and the form "refused" to submit. `settings.test.tsx` shows it.
+- **`npx jest src/app/(tabs)/…` matches nothing.** The path is a regex and the
+  parentheses form a group, so jest looks for `src/app/tabs/…`, finds no
+  file, and a grep for the summary line shows nothing at all. Pass a bare
+  name such as `npx jest inventory.test`.
 - **A mocked `useRouter` must return one stable object.** `/orders` keys its
   fetch effect on `router`; a fresh object per render refetched after the
   cancel and overwrote the new status, which looked like the page was broken.
