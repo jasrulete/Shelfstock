@@ -150,7 +150,16 @@ docker compose down        # stops containers; keeps the database volume
   `pending`; it runs through the same transition code, so the stock comes
   back and the ledger says who cancelled.
 - **Admin** — sales dashboard (revenue over time, top products), product
-  CRUD (`/admin/products`), and order fulfillment (`/admin/orders`).
+  CRUD (`/admin/products`), and order fulfillment (`/admin/orders`). Every
+  change to a product's stock — checkout, cancellation, the admin form, the
+  companion's stepper — writes a `stock_adjustments` row in the same
+  transaction, and the **History** link in each row's stock cell shows where
+  the number came from.
+- **Android companion** — [shelfstock-companion](https://github.com/jasrulete/shelfstock-companion),
+  an admin app over this same API: order management with push notifications,
+  barcode scan-to-verify packing, an inventory stepper that moves stock by
+  delta, offline read caching and an offline write queue. It is a client of
+  the contract in [docs/API.md](docs/API.md), never a second source of truth.
 - **Password reset** — emailed single-use link, valid for an hour. The token
   is stored only as a SHA-256 hash, so a database dump cannot be replayed into
   an account takeover, and `/forgot-password` answers identically whether or
@@ -271,7 +280,7 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Testing
 
-**API tests** — 112 Vitest + Supertest tests with the database mocked, covering
+**API tests** — 244 Vitest + Supertest tests with the database mocked, covering
 auth middleware, registration/login (including the email-enumeration defense
 and email-format validation, which login deliberately skips so accounts
 predating the rule can still sign in), pagination caps and sort-column
@@ -281,7 +290,7 @@ JSON-LD escaping against a script-tag breakout, and the checkout transaction:
 price snapshotting (a hostile client-supplied price is ignored), stock
 decrement/restore, and row-level authorization.
 
-**Component tests** — 38 tests with Testing Library, aimed at the behaviour
+**Component tests** — 59 tests with Testing Library, aimed at the behaviour
 that is easy to break silently rather than at markup:
 
 - **Cart** (`useCart`) — quantity can never exceed the stock last seen, repeat

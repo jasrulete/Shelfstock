@@ -3,6 +3,13 @@
 Written 2026-08-21 against `main` at `902740e`. Companion app at
 `shelfstock-companion` `e726113`.
 
+> **This is the plan as it was written, kept for its reasoning — the scope
+> decisions and what was cut and why. It is not a status board.** Everything
+> here except §4.1 (screenshots and the scan GIF) shipped by 2026-09-06;
+> [HANDOVER.md §0](../HANDOVER.md) is the status, and two decisions below were
+> reversed in the building: the idempotency key in §3.1 and the offline write
+> queue's "step 1 only" in §5. Both are flagged in place.
+
 Produced by five research passes over adjacent products, three code audits of
 both repositories, and three adversarial review passes. 37 candidates were
 drafted; 32 survived review, 5 were cut. Every file reference below was read
@@ -211,6 +218,14 @@ admin-supplied `note` as text only. Idempotency-key machinery was cut as
 L-effort against an S-effort risk — with an atomic delta update, a replay is a
 visible, correctable off-by-one.
 
+> **Reversed 2026-09-06.** Once stepper presses could be queued offline and
+> replayed after a relaunch, the replay stopped being a rare off-by-one: the
+> persister's write to disk lags the live mutation state by up to a second, so
+> an app killed in that window re-sends a press the server already applied.
+> `adjust-stock` now takes a `requestId` and dedupes it against
+> `stock_adjustments.client_request_id` under the row lock. The effort was S,
+> not L, because the queue had already made the key necessary.
+
 ### 3.2 Serve the transition matrix instead of copying it
 
 The phone carries its own copy of the order lifecycle and it has **already
@@ -322,7 +337,7 @@ Every item was scoped down on review. Build the trimmed version.
 
 | Item | Scope after review |
 |---|---|
-| Offline write queue | **Step 1 only.** `setMutationDefaults` for `['order-status']` and `['product']`, `resumePausedMutations` on the persister's `onSuccess`, and a visible `mutation.isPaused` "Queued — sends when you're back online". Drop `expo-sqlite`, the `pending_mutations` table and the background-task flush. |
+| Offline write queue | **Step 1 only** *(scope as planned; step 2 shipped too — see below)*. `setMutationDefaults` for `['order-status']` and `['product']`, `resumePausedMutations` on the persister's `onSuccess`, and a visible `mutation.isPaused` "Queued — sends when you're back online". Drop `expo-sqlite`, the `pending_mutations` table and the background-task flush. |
 | Notification preferences | Persistence fix + denied-permission state now. `(tabs)/_layout.tsx:11-15` calls `enablePush()` unconditionally on every mount, so turning it off silently re-enables. Defer per-event toggles. |
 | List ergonomics | 300ms debounce + `keepPreviousData`, and real `isError`/retry states on inventory. **Infinite scroll cut** — layered on a persisted cache it is a bug factory for no demo-visible gain. |
 | Accessibility | Skip link + `<main id="main">`; `scope="col"` and `sr-only` captions on 25 `<th>` across four admin tables (`grep 'scope='` returns nothing); `accessibilityLabel` on the seven ProductForm inputs; `OfflineBanner` safe-area fix. |
@@ -333,6 +348,13 @@ Every item was scoped down on review. Build the trimmed version.
 | Tests | `tests/winback.test.ts` covering the `NOT EXISTS` dedup and "a Resend failure inserts no `winback_emails` row", plus a ProductForm blank-price guard. The CRM segmentation test was cut as lower value. |
 
 ---
+
+**Step 2 shipped as well (2026-09-06).** The stepper joined the queue in
+companion #15–#17: presses queue offline, run one per product at a time in
+press order, survive a relaunch, carry a `requestId` the server dedupes on,
+and retry once on a dropped connection. The row shows only counts the server
+has sent, with unconfirmed presses drawn beside it. The reason for going
+further than planned is in the reversal note in §3.1.
 
 ## 6. Rejected, and why
 

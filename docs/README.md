@@ -27,7 +27,7 @@ definition of done, and the verification standard.
 
 | Document | Owns |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | The system shape and **the 12 invariants**. The anchor document. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | The system shape and **the 13 invariants**. The anchor document. |
 | [API.md](API.md) | The HTTP contract. **Canonical for both clients.** |
 | [DATA-MODEL.md](DATA-MODEL.md) | Tables, indexes, migration rules. |
 | [SECURITY.md](SECURITY.md) | Trust boundaries, controls, and every known weakness with its compensating control. |

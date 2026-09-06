@@ -130,6 +130,7 @@ Turns "stock: 12" into "stock: 12 — +5 from the companion app, 2 minutes ago".
 | `source` | VARCHAR(20) NOT NULL | `CHECK IN ('web-admin', 'companion', 'order', 'cancel')`. The first two are declared by the client that pressed the button; the last two are written only by the server. |
 | `user_id` | INTEGER → `users` ON DELETE **SET NULL** | An audit row outlives the account that wrote it. |
 | `note` | TEXT | ≤200 chars at the API, stored trimmed. **Admin-typed — render as text only.** |
+| `client_request_id` | TEXT | The companion's idempotency key for one stepper press, 8–64 chars of `[A-Za-z0-9._-]`, unique where not null. Null for every other path — the web admin's stepper, checkout, and cancellation carry none. Added 2026-09-06 because the companion's offline queue can replay a press that already landed; `adjust-stock` looks it up under the row lock and answers a replay with the row it already wrote. |
 | `created_at` | TIMESTAMPTZ | |
 
 ## 2. Indexes
@@ -148,6 +149,7 @@ Turns "stock: 12" into "stock: 12 — +5 from the companion app, 2 minutes ago".
 | `idx_winback_emails_user_id` | `winback_emails` | Dedup check |
 | `idx_password_resets_token_hash` (UNIQUE), `idx_password_resets_user_id` | `password_resets` | Lookup and retire-on-reissue |
 | `idx_stock_adjustments_product_recent` | `stock_adjustments (product_id, created_at DESC)` | The only read: newest rows for one product |
+| `uq_stock_adjustments_client_request_id` (UNIQUE, partial) | `stock_adjustments (client_request_id) WHERE client_request_id IS NOT NULL` | One row per companion press, however many times it is sent |
 
 **The three search indexes are used together in a `BitmapOr`** — measured at
 8.9ms against 1039ms for the same predicate scanned sequentially, on 40k rows.

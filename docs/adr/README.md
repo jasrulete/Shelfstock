@@ -18,6 +18,7 @@ inventory.
 | [0006](0006-forced-login-no-guest-checkout.md) | Checkout requires an account | Accepted |
 | [0007](0007-server-owns-the-order-lifecycle.md) | The server owns the order lifecycle; clients must not copy it | Accepted, implemented 2026-09-05 |
 | [0008](0008-apk-distribution-no-play-store.md) | The companion ships as a GitHub Release APK | Accepted |
+| [0009](0009-offline-write-queue.md) | Offline writes ship as a persisted mutation queue with idempotency keys | Accepted, supersedes part of 0004 |
 
 ## Writing a new one
 
