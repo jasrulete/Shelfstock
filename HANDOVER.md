@@ -32,8 +32,8 @@ the log of how the project got here; this one is where it is.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #34 (customer self-cancel); before it #33, #32, #31 | `5c1bd21` — merge of #7 (notification preferences) |
-| Production | Vercel deploys `main` automatically, so #32–#34 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
+| `main` | the merge of #35 (accessibility); before it #34 self-cancel, #33, #32, #31 | the merge of #8 (accessibility); before it #7 notification preferences |
+| Production | Vercel deploys `main` automatically, so #32–#35 are live. Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
 | Open PRs | none | none |
 | Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
 
@@ -50,7 +50,7 @@ the log of how the project got here; this one is where it is.
 | §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
 | §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
 | §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | 🟡 4 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34). Remaining five in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
+| Phase 3 — nine depth items | 🟡 5 of 9 done: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8). Remaining four in §0.4. Self-cancel is **not production-verified** — it needs a customer account; the owner can try it from `/orders`. |
 | Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
 | Extra: doc-link checker in CI | ✅ #27 |
 | Extra: migration-order runbook | ✅ #25 |
@@ -88,18 +88,20 @@ Done on 2026-09-06, each as its own PR: notification preferences (companion
 #7), storefront `cache()` (#32), reviews "Show more" (#33), customer
 self-cancel (#34 — `server/orderTransitions.ts` is now the one place an
 order's status changes; the admin PATCH and the customer cancel are thin
-callers). What is left, in order:
+callers), accessibility (#35: skip link, `<main id="main">`, a caption and
+`scope="col"` on the four admin tables, pinned at the source by
+`tests/a11y.markup.test.ts`; companion #8: `accessibilityLabel` on the seven
+ProductForm inputs, `OfflineBanner` padded by the top inset and announced as
+an alert). What is left, in order:
 
-1. **Accessibility.** Skip link + `<main id="main">`; `scope="col"` and
-   sr-only captions on the admin tables; `accessibilityLabel` on the seven
-   ProductForm inputs; `OfflineBanner` safe-area.
-2. **List ergonomics** (companion). 300 ms debounce + `keepPreviousData` on
+1. **List ergonomics** (companion). 300 ms debounce + `keepPreviousData` on
    inventory search; real `isError`/retry states. Infinite scroll stays cut.
-3. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
+2. **Low-stock chip** on the inventory tab from `GET /api/analytics/low-stock`.
    Chip only.
-4. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
-   no row". ProductForm blank-price guard.
-5. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
+3. **Tests.** `winback`: the `NOT EXISTS` dedup, and "a Resend failure inserts
+   no row". ProductForm blank-price guard — note `Number('')` is `0`, so today
+   a blank price submits as free; the guard is a fix, not just a test.
+4. **Offline write queue, step 1 only.** `setMutationDefaults` for order-status
    and product, `resumePausedMutations` on the persister's `onSuccess`, a
    visible "Queued — sends when you're back online".
 
@@ -137,6 +139,15 @@ different form, otherwise hand the command to the owner.
 - **`git checkout -- file` restores HEAD, not "before the mutation".** Used
   to undo a mutation check on a file with uncommitted work, it wiped the
   work. Commit first, or `cp` a backup and restore from that.
+- **Backslashes in a command handed to the shell tool arrive unescaped.** A
+  regex word boundary written with a doubled backslash in a Python heredoc
+  reached the file as a backspace byte, and the test matched nothing. Build
+  the character with `chr(92)`, or write the file with the Write tool. The
+  same applies to escaped double quotes: keep scripts, commit messages and
+  PR bodies in files and pass the file.
+- **The companion's Testing Library is the async one: `await fireEvent.…` as
+  well as `await render`.** An un-awaited `changeText` left the controlled
+  input empty and the form "refused" to submit. `settings.test.tsx` shows it.
 - **A mocked `useRouter` must return one stable object.** `/orders` keys its
   fetch effect on `router`; a fresh object per render refetched after the
   cancel and overwrote the new status, which looked like the page was broken.

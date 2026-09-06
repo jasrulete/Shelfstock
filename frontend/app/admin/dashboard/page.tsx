@@ -173,11 +173,12 @@ export default function AdminDashboardPage() {
         <h2 className="mb-2 font-semibold">Top Products</h2>
         <Card className="overflow-hidden">
           <table className="w-full text-sm">
+            <caption className="sr-only">Top products by units sold and revenue</caption>
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                <th className="p-2 font-medium text-gray-600">Product</th>
-                <th className="p-2 font-medium text-gray-600">Units Sold</th>
-                <th className="p-2 font-medium text-gray-600">Revenue</th>
+                <th scope="col" className="p-2 font-medium text-gray-600">Product</th>
+                <th scope="col" className="p-2 font-medium text-gray-600">Units Sold</th>
+                <th scope="col" className="p-2 font-medium text-gray-600">Revenue</th>
               </tr>
             </thead>
             <tbody>

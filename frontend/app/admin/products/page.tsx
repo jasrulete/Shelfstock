@@ -343,13 +343,14 @@ export default function AdminProductsPage() {
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <caption className="sr-only">Products: category, price, stock and actions</caption>
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                  <th className="p-2 font-medium text-gray-600">Name</th>
-                  <th className="p-2 font-medium text-gray-600">Category</th>
-                  <th className="p-2 font-medium text-gray-600">Price</th>
-                  <th className="p-2 font-medium text-gray-600">Stock</th>
-                  <th className="p-2">
+                  <th scope="col" className="p-2 font-medium text-gray-600">Name</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Category</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Price</th>
+                  <th scope="col" className="p-2 font-medium text-gray-600">Stock</th>
+                  <th scope="col" className="p-2">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
