@@ -32,6 +32,7 @@ definition of done, and the verification standard.
 | [DATA-MODEL.md](DATA-MODEL.md) | Tables, indexes, migration rules. |
 | [SECURITY.md](SECURITY.md) | Trust boundaries, controls, and every known weakness with its compensating control. |
 | [OPERATIONS.md](OPERATIONS.md) | Environments, deploys, migrations, runbook. |
+| [OWNER-RUNBOOK.md](OWNER-RUNBOOK.md) | The steps only the owner can do — production migration, EAS build, device verification, screenshots, CSP promotion — with what done looks like. |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Setup, workflow, definition of done, testing, gotchas. |
 | [adr/](adr/) | Decisions that had a real alternative, and why it lost. |
 | [ROADMAP.md](ROADMAP.md) | What is next, in order, and what was rejected. |
