@@ -59,9 +59,8 @@ there; say the word and it does that part.
 the replay proof passed on product 6: the first `+1` wrote ledger row 3
 carrying its request id, the identical request was answered
 `replayed: true` with that same row and wrote nothing, and the `-1` wrote
-row 4 — two new rows, not three, stock back where it started. Not confirmed
-from the terminal transcript: step 6, the Neon `preview` branch; if it was
-skipped, PR previews fail on every stock move until it is run. The steps
+row 4 — two new rows, not three, stock back where it started. The owner
+confirmed the migration ran on the Neon `preview` branch as well. The steps
 stay here for the next schema change.
 
 **Why.** The companion now sends a `requestId` with every stepper press so a
