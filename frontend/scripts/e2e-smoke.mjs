@@ -1,8 +1,8 @@
 // End-to-end smoke test against a RUNNING ShelfStock stack (fresh database).
 //
 // Exercises the real HTTP API: register → checkout → stock decrement →
-// price snapshotting → row-level authorization → admin order lifecycle →
-// cancellation stock restore → analytics.
+// price snapshotting → row-level authorization → customer self-cancel →
+// admin order lifecycle → cancellation stock restore → ledger → analytics.
 //
 // Usage (from the repo root, with a fresh db volume):
 //   docker compose up -d --wait db api
@@ -106,6 +106,35 @@ const stolen = await api(`/orders/${order1Id}`, { token: intruder.json.token });
 assert.equal(stolen.status, 404, "another user cannot read my order (404, no id leak)");
 log("row-level authorization holds: other users get 404 on my order");
 
+// --- customer self-cancel ----------------------------------------------------
+// A pending order can be cancelled by its owner (the web's /orders page). It
+// runs through the same transition code as the admin's PATCH, so the unit
+// comes back and the ledger says who cancelled. Anyone else gets 404 - the
+// same non-answer as reading it - and a second attempt gets 409.
+const customerToken = intruder.json.token;
+const order3 = await api("/orders", {
+  method: "POST",
+  token: customerToken,
+  body: { items: [{ productId: 1, quantity: 1 }], shipping },
+});
+assert.equal(order3.status, 201, `customer checkout: ${JSON.stringify(order3.json)}`);
+const order3Id = order3.json.id;
+assert.equal((await api("/products/1")).json.stock, stockBefore - 3, "the customer's unit is reserved");
+
+const notMine = await api(`/orders/${order3Id}/cancel`, { method: "POST", token });
+assert.equal(notMine.status, 404, "someone else cannot cancel my order (404, no id leak)");
+assert.equal((await api("/products/1")).json.stock, stockBefore - 3, "a refused self-cancel restores nothing");
+
+const selfCancel = await api(`/orders/${order3Id}/cancel`, { method: "POST", token: customerToken });
+assert.equal(selfCancel.status, 200, `self-cancel: ${JSON.stringify(selfCancel.json)}`);
+assert.equal(selfCancel.json.status, "cancelled");
+assert.deepEqual(selfCancel.json.allowed_transitions, [], "cancelled is terminal, and the server says so");
+assert.equal((await api("/products/1")).json.stock, stockBefore - 2, "self-cancel restores the customer's unit");
+
+const again = await api(`/orders/${order3Id}/cancel`, { method: "POST", token: customerToken });
+assert.equal(again.status, 409, "a cancelled order cannot be self-cancelled again");
+log(`order ${order3Id}: customer self-cancel restored the unit; stranger 404, repeat 409`);
+
 // --- admin lifecycle ---------------------------------------------------------
 const promote = process.env.PROMOTE_CMD;
 assert.ok(promote, "PROMOTE_CMD env var required (promotes the test user to admin)");
@@ -123,11 +152,32 @@ const order2 = await api("/orders", {
 const order2Id = order2.json.id;
 log(`order ${order2Id} placed (1 unit) for the cancellation path`);
 
-for (const status of ["shipped", "completed"]) {
-  const r = await api(`/orders/${order1Id}/status`, { method: "PATCH", token: adminToken, body: { status } });
-  assert.equal(r.json.status, status, `order ${order1Id} -> ${status}`);
-}
-log(`order ${order1Id}: pending -> shipped -> completed`);
+const shipped = await api(`/orders/${order1Id}/status`, { method: "PATCH", token: adminToken, body: { status: "shipped" } });
+assert.equal(shipped.json.status, "shipped", `order ${order1Id} -> shipped`);
+
+// The owner (this user placed order 1 before being promoted) may no longer
+// self-cancel: the parcel is on its way, and that is the admin's call.
+const tooLate = await api(`/orders/${order1Id}/cancel`, { method: "POST", token: adminToken });
+assert.equal(tooLate.status, 409, `the owner cannot self-cancel once shipped: ${JSON.stringify(tooLate.json)}`);
+
+const completed = await api(`/orders/${order1Id}/status`, { method: "PATCH", token: adminToken, body: { status: "completed" } });
+assert.equal(completed.json.status, "completed", `order ${order1Id} -> completed`);
+log(`order ${order1Id}: pending -> shipped (self-cancel refused, 409) -> completed`);
+
+// An admin cannot use the customer route on someone else's order either;
+// the admin's path is PATCH, which is logged as the admin's action.
+const backDoor = await api(`/orders/${order3Id}/cancel`, { method: "POST", token: adminToken });
+assert.equal(backDoor.status, 404, "the self-cancel route is not an admin back door");
+
+// INV-13: every stock change writes a ledger row, and this one says who.
+const history = await api("/products/1/stock-history", { token: adminToken });
+assert.equal(history.status, 200, `stock history: ${JSON.stringify(history.json)}`);
+const customerRow = history.json.adjustments.find(
+  (row) => row.source === "cancel" && row.note === `Order #${order3Id} cancelled by the customer`
+);
+assert.ok(customerRow, "the ledger records the customer's cancellation with its note");
+assert.equal(customerRow.delta, 1, "the ledger row restores exactly the cancelled unit");
+log("ledger row for the customer's cancellation present, delta +1");
 
 // The store's whole claim is that the listing matches the shelf. Order 1 is
 // completed - delivered, cash collected - so its two units are with the
