@@ -70,6 +70,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -77,6 +78,27 @@ export default function ProductReviews({ productId }: { productId: string }) {
       .then(setData)
       .catch(() => setData(null));
   }, [productId]);
+
+  /**
+   * The API pages reviews at 10, and until this the component never read
+   * `pagination`: an eleventh review counted in the average and was invisible.
+   * Appends rather than replaces, so the reader keeps their place and the new
+   * reviews land below.
+   */
+  async function loadMore() {
+    if (!data) return;
+    setLoadingMore(true);
+    try {
+      const next = await api.get<ReviewsResponse>(
+        `/api/products/${productId}/reviews?page=${data.pagination.page + 1}`
+      );
+      setData({ ...next, reviews: [...data.reviews, ...next.reviews] });
+    } catch {
+      // Leave what is shown; the button stays for another try.
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     // Read auth after mount: localStorage isn't available during SSR, and
@@ -178,6 +200,19 @@ export default function ProductReviews({ productId }: { productId: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {data && data.reviews.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <p role="status" className="text-sm text-gray-500">
+            Showing {data.reviews.length} of {data.pagination.total} reviews
+          </p>
+          {data.pagination.page < data.pagination.totalPages && (
+            <Button variant="secondary" size="sm" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? 'Loading…' : 'Show more reviews'}
+            </Button>
+          )}
+        </div>
       )}
     </section>
   );
