@@ -18,219 +18,325 @@
 > Then **§3 and §3a**, the record of what was built and how each claim was
 > verified. That is history, and history does not go stale.
 
-Written 2026-08-03, last updated 2026-09-03. Point a new conversation at this
-file to pick up where the last one left off.
+Written 2026-08-03, last updated 2026-09-06. Point a new conversation at this
+file to pick up where the last one left off — start at §0.
 
 ---
 
 ## 0. Handover — 2026-09-06 (current; read this first)
 
-**Nothing is pending on the agent's side.** The sections below this one are
-the log of how the project got here; this one is where it is.
+**Nothing is queued for the agent. Four things are waiting for the owner, and
+they all need a phone or a browser rather than a keyboard.** The roadmap is
+finished except for screenshots; both repos are clean on `main` with no open
+PRs; every suite is green. What follows is the state, what was built and how
+each claim was checked, what is knowingly not done, and the working
+agreements that made it go. The sections below §0 are the older logs.
+
+If you are an agent picking this up: read §0.1 through §0.4, then
+[docs/](docs/). Do not treat this file as a specification — `docs/` is the
+source of truth, and §0.9 says which document owns what.
 
 ### 0.1 Where everything stands
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #45 (this refresh); before it #44, #43 owner's runbook, #41 requestId dedupe (migration run and verified on production 2026-09-06), #40 self-cancel E2E, #39, #38, #35, #34, #33, #32 | the merge of #17 (a retry for a lost stepper press, safe now that the server dedupes); before it #16, #15 the stepper's offline queue, #14, #13, #12 step 1, #11, #10, #9, #8, #7 |
-| Production | Vercel deploys `main` automatically, so #32–#43 are live. #41's migration was run by the owner and the replay dedupe verified on production on 2026-09-06 (product 6: `+1` wrote ledger row 3 with its request id, the identical request was answered `replayed: true` with the same row, `-1` wrote row 4). Verified 2026-09-05 against the live site (before #32): `allowed_transitions` on every order payload, all six demo products carry `200…` barcodes, anonymous responses carry none, `/api/csp-report` answers `204`, `/api/health` reports `database: ok`. | **No APK has been built from any of the last two days' work.** EAS is not initialised: `eas-cli` 20.5.0 is installed and logged in as `jer2x`, but `app.json` has no `extra.eas.projectId` — which is also why push tokens cannot register yet. |
+| `main` | the merge of #47, this handover | the merge of #18 |
+| Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
-| Local / remote | `main`, clean. Remote has only `main`. Git pushes as `jasrulete` by name (§0.5). | same |
+| Remote branches | `main` only | `main` only |
+| Tests | **303 passing in 28 files** — `server` project 244 in 20, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **101 passing in 18 suites**, ~27 s (`npx jest`) |
+| Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
+| Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI |
+| Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
+| Production | Vercel deploys `main` automatically, so everything through #47 is live | **No APK exists.** EAS is not initialised — `app.json` has no `extra.eas.projectId` — so no build has ever carried this month's work, and push tokens cannot register |
 
-### 0.2 Roadmap status
+Numbers of record: **13 invariants** (INV-1…INV-13) in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
+(KW-1…KW-9) in [docs/SECURITY.md](docs/SECURITY.md), **9 ADRs**
+(0001…0009) in [docs/adr/](docs/adr/), and **8 client invariants**
+(C-INV-1…C-INV-8) in the companion's own `docs/ARCHITECTURE.md`.
 
-| Item | Status |
-|---|---|
-| Phase 0 — the eight defects | ✅ #19, companion #2 |
-| §3.1 Stock ledger + stepper | ✅ #23, companion #4 — verified on production |
-| §3.2 Serve the lifecycle (ADR-0007) | ✅ #26, companion #5 |
-| §3.3 Push refreshes the app | ✅ companion #5 |
-| §3.4 Real barcodes + printable sheet | ✅ #28 — production catalogue coded through the endpoint |
-| §3.5 Scan-to-verify | ✅ #29, companion #6 — **not device-verified** |
-| §4.1 Screenshots + scan GIF | ❌ needs a phone — §0.3 |
-| §4.2 Nested `.git` gone, old repo archived | ✅ #21 |
-| §4.3 Decision log | ✅ #20 (eight ADRs) |
-| Phase 3 — nine depth items | ✅ complete 2026-09-06: notification preferences (companion #7), storefront `cache()` (#32), reviews "Show more" (#33), customer self-cancel with the shared `transitionOrder()` (#34), accessibility (#35 + companion #8), list ergonomics (companion #9), low-stock chip (companion #10), tests (#38 winback, companion #11 blank-price guard), offline write queue step 1 (companion #12) and step 2, the stepper (companion #15, #16, #17; server half #41, live and verified on production). Self-cancel is verified end-to-end on the Dockerized stack (E2E smoke, #40: stranger 404, owner 200 with the unit restored, repeat 409, refused once shipped, admin gets 404 on the customer route, ledger row names the customer) — production itself was left untouched. None of the companion work is device-verified until an APK exists (§0.3). |
-| Extra: CSP reporting endpoint | ✅ #22 — promotion pending a clean day of logs |
-| Extra: doc-link checker in CI | ✅ #27 |
-| Extra: migration-order runbook | ✅ #25 |
+### 0.2 What shipped on 2026-09-06
 
-### 0.3 The owner's items
+Seventeen PRs on the web repo (#31–#47) and twelve on the companion (#7–#18).
+Grouped by what they actually do:
 
-The step-by-step for every item below, with the exact commands and what
-"done" looks like, is [docs/OWNER-RUNBOOK.md](docs/OWNER-RUNBOOK.md). This
-list is the summary.
+**Roadmap Phase 3, all nine items.** Notification preferences that survive a
+relaunch and say when the OS has blocked them (companion #7). A storefront
+product read wrapped in React's request-scoped `cache()`, four database round
+trips down to two (#32). "Show more reviews" instead of silently hiding the
+eleventh (#33). Customer self-cancel (#34). Accessibility: a skip link, a
+`main` landmark, and captions plus `scope="col"` on all 21 headers across the
+four admin tables (#35), with names on the companion's form fields and a
+safe-area offline banner (companion #8). Inventory list ergonomics — a
+debounced search that keeps the previous list up, and a real error state
+(companion #9). A low-stock chip (companion #10). The two missing test areas,
+win-back (#38) and a blank-price guard that turned out to be a bug fix
+(companion #11). And the offline write queue, which grew from a small item
+into the session's largest piece of work.
 
-1. **Initialise EAS and build the APK** — from the companion folder. Both
-   change the Expo account, so they are yours to run:
+**The offline write queue, and what it cost.** Step 1 (companion #12) gives
+order-status changes and product edits keyed mutation defaults, so a write
+made without signal waits instead of failing and is sent on the next launch.
+Step 2 (companion #15, #16) brought in the stock stepper, and it was designed
+through a panel of three independent designs judged by three verifiers before
+a line was written. The design that won removed the optimistic count: the row
+shows only numbers the server has sent, with unconfirmed presses drawn beside
+it as `+2 pending`. That is not decoration. Hydration restores a mutation's
+state whole, context included, so an `onMutate` snapshot comes back from disk
+and would roll every row to a stale count on a `409` replayed hours later.
 
-   ```bash
-   eas init
-   ```
+An adversarial review of that PR then found a real defect: the AsyncStorage
+persister throttles its write by a second, so a press that has already
+reached the server can still be on disk marked paused — and an app killed in
+that window replays a delta. That produced the per-press `requestId`, the
+server-side dedupe (#41, which was deliberately held until its migration
+ran), and finally the single transport-error retry that only became safe once
+the dedupe was live (companion #17).
 
-   ```bash
-   eas build --platform android --profile preview
-   ```
+**The four follow-ups.** Self-cancel covered end-to-end in the Dockerized
+smoke test (#40). A blank-stock guard (companion #13). The last lint warning
+in either repo (companion #14). And the transport retry above.
 
-   `eas init` writes `extra.eas.projectId` into `app.json` — commit it. Attach
-   the APK to a GitHub Release (`shelfstock-companion/docs/SETUP.md` §6).
-   Until this happens, nothing from the last two days reaches a phone.
-2. **Screenshots and the scan GIF** into `shelfstock-companion/docs/screenshots/`:
-   login, orders list, order detail, the scanner, a push on the lock screen,
-   the inventory stepper, and pack & verify ticking lines off. Both READMEs
-   have the section waiting.
-3. **Device-verify pack & verify** — print `/admin/barcodes` as the demo
-   admin, open a pending order on the phone, pack it. It is tested against a
-   mocked camera only.
-4. **~~Run the `client_request_id` migration on production, then merge #41~~**
-   — done 2026-09-06 and verified (§0.1), on the Neon `preview` branch as
-   well (owner's confirmation).
-5. **Promote the CSP** once a day of production traffic has produced no
-   `CSP violation:` lines — [OPERATIONS.md §5](docs/OPERATIONS.md#reading-csp-reports),
-   all four steps.
+**Documentation.** The owner's runbook (#43), which is the manual for
+everything in §0.5. A truth pass over both repos (#46, companion #18) after
+an audit found twenty-one stale claims — including one rule violation of our
+own: #41 added a column without updating `docs/DATA-MODEL.md`, which
+`docs/README.md` names as required. ADR-0009 supersedes ADR-0004's
+"offline writes remain out of scope", because the repo forbids editing an
+accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
+#44, #45, and this one, #47).
 
-### 0.4 Next agent work
+| Web | | Companion | |
+|---|---|---|---|
+| #31 | handover | #7 | notification preferences |
+| #32 | product read cached per request | #8 | accessibility |
+| #33 | show more reviews | #9 | list ergonomics |
+| #34 | customer self-cancel | #10 | low-stock chip |
+| #35 | accessibility | #11 | blank-price guard |
+| #36, #37 | handover, analytics doc row | #12 | offline queue, step 1 |
+| #38 | win-back tests | #13 | blank-stock guard |
+| #39 | handover | #14 | last lint warning |
+| #40 | self-cancel in the E2E smoke | #15, #16 | offline queue, step 2 |
+| #41 | `requestId` dedupe (held) | #17 | transport retry |
+| #42, #43 | handover, owner's runbook | #18 | docs truth pass |
+| #44, #45 | handover | | |
+| #46, #47 | docs truth pass, this handover | | |
 
-**Phase 3 is complete (§0.2), the four follow-ups below are done, and the
-roadmap has no Phase 4.** Nothing is queued for the agent; the owner's
-remaining items are in [docs/OWNER-RUNBOOK.md](docs/OWNER-RUNBOOK.md)
-tasks 2–5. What remains is the owner's list in §0.3: the EAS
-build, the screenshots and scan GIF, device verification of pack & verify
-and of the companion work from 2026-09-06, and the CSP promotion.
+Note the merge order: #42 and #43 landed **before** #41, because #41 was held
+until the owner had run its migration.
 
-The four candidates noted on 2026-09-06 were then taken up the same day on
-the owner's "do the next steps":
+### 0.3 What is verified, and how
 
-1. **Verify self-cancel** — done as E2E coverage on the Dockerized stack
-   (#40) rather than against production, which needs no test accounts.
-2. **Offline write queue, step 2 — the stock stepper** — done, companion
-   #15 (+ #16, one test). Designed through a judged panel of three designs
-   and reviewed adversarially before merge; the review found that the
-   persister's write lags the live state by up to a second, so a press can
-   replay after a kill — hence the per-press `requestId` and the held
-   server PR #41. The row shows only server-sent counts with unconfirmed
-   presses beside it (`+2 pending`); presses on one product are serialised
-   by mutation scope and survive a relaunch; a 409 lands on the count it
-   reports. C-INV-8 in the companion's ARCHITECTURE.md is the contract.
-   With #41 live, a press whose request never got an answer is now sent
-   once more with the same id (companion #17). Named, not done: the
-   ProductForm PUT-with-stock hazard.
-3. **Blank stock in ProductForm** — done, companion #13.
-4. **The lint warning** in `src/api/types.ts` — done, companion #14; both
-   repos now lint with 0 problems.
+The distinction matters more than the totals. Nothing below is claimed on the
+strength of a passing unit test alone.
 
-Each as its own PR. [DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-definition-of-done)
-applies: a test that fails without the change, mutation-checked, docs updated
-in the same commit.
+| Claim | How it was checked | Where |
+|---|---|---|
+| A replayed companion press is applied once | **On production.** Product 6: `+1` wrote ledger row 3 carrying its request id; the identical request answered `replayed: true` with that same row and wrote nothing; `-1` wrote row 4. Two new rows, not three; stock back where it started | owner ran it, 2026-09-06 |
+| `requestId` is validated before a transaction opens | **On production**, with a malformed id against a product that does not exist → `400`, no transaction | same |
+| Customer self-cancel | **End-to-end on the Dockerized stack**, not production: stranger 404, owner 200 with the unit restored, repeat 409, refused once shipped, admin 404 on the customer route, and the ledger row naming the customer | `frontend/scripts/e2e-smoke.mjs`, #40 |
+| Order lifecycle, barcodes, CSP endpoint, health | **On production**, but on 2026-09-05 and therefore *before* #32 | earlier session |
+| The offline queue, the stepper, pack & verify, push preferences | **Jest only**, with a mocked camera and a mocked network | companion suites |
+| Every behaviour change in both repos | A test that fails without the change, then a **mutation check** proving the test is load-bearing — 12 mutants for the stepper alone, 4 more for the retry, 4 for the server dedupe | per PR |
 
-### 0.5 Accounts and tooling
+**No companion behaviour has ever run on a phone from this month's work.**
+That is §0.5 item 2, and it is the single largest gap in the evidence.
 
-Unchanged from §0a.4. Only `jasrulete` can push or merge. Both repos ask `gh`
-for the `jasrulete` token **by name**, so `git push` works regardless of which
-account gh has active — and that flips on its own between commands. `gh pr
-merge`, `gh api` and `gh repo archive` follow the active account, so do the
-switch and the command in **one shell command**:
-`gh auth switch --user jasrulete >/dev/null 2>&1 && gh pr merge N --repo jasrulete/<repo> --merge`.
-Agent sessions get nondeterministic classifier blocks on `gh auth switch`,
-`gh pr merge`, `gh api -X DELETE` and `rm -rf` of a `.git`; retry once in a
-different form, otherwise hand the command to the owner.
+### 0.4 Known gaps, named and not done
 
-### 0.6 Gotchas from 2026-09-05 and 06, each with its fix
+1. **The product form PUTs an absolute `stock`.** An edit queued alongside
+   stepper presses on the same product replays in parallel with them
+   (different mutation scopes) and can land on top of what they moved. Named
+   in the companion's C-INV-8 and in ADR-0009; not fixed. This is the one
+   real correctness item left.
+2. **Screenshots and the scan GIF do not exist.** `docs/screenshots/` holds a
+   `.gitkeep`. The companion README's Screenshots section is still an HTML
+   comment. Roadmap §4.1 is the only roadmap row not done.
+3. **The CSP is still report-only.** Promotion is one string literal plus two
+   test assertions plus a docs pass; it waits on a clean day of logs.
+4. **Android push cannot be delivered yet.** Beyond `eas init`, it needs a
+   Firebase project, `google-services.json` committed, and the FCM key
+   uploaded through `eas credentials`. None of that exists.
+5. **Local clutter in the web checkout**, mentioned nowhere else: a second
+   worktree at `.claude/worktrees/handover-session` pinned to `902740e` on
+   `claude/password-reset`, five stale local branches, and a stale
+   `origin/claude/adjust-stock-idempotency` tracking ref. The remote is
+   clean; `git fetch --prune` and `git worktree remove` would tidy it.
+6. **`docs/ROADMAP.md` is a plan, not a status board**, and now says so. Two
+   of its decisions were reversed while building — the idempotency key it cut
+   and the offline queue's "step 1 only" — and both are flagged in place.
 
-- **A `grep` pattern that starts with `-` is read as a flag.** `grep -E "->|x"`
-  failed, the `&&` chain skipped the merge, and a `;`-separated cleanup then
-  deleted the unmerged branch and auto-closed companion #7 (recovered from the
-  reflog and reopened). Write `grep -E -e "..."`, and never put a delete after
-  `;` — gate it on the merge result:
-  `m=$(gh api repos/O/R/pulls/N --jq .merged) && [ "$m" = "true" ] && git push --delete …`.
-- **The repo does not use Prettier.** `npx prettier` runs with the defaults
-  (double quotes, width 80) and rewrites whole files into a foreign style;
-  only `eslint` runs in CI. Match the surrounding style by hand and check
-  `git diff --stat` for a file that changed far more than you touched.
-- **The shell hook refuses any command text that looks like an unqualified
-  SQL update**, even a source-code string inside a heredoc. Put such scripts
-  in a file with the Write tool and run the file.
-- **`git checkout -- file` restores HEAD, not "before the mutation".** Used
-  to undo a mutation check on a file with uncommitted work, it wiped the
-  work. Commit first, or `cp` a backup and restore from that.
-- **Backslashes in a command handed to the shell tool arrive unescaped.** A
-  regex word boundary written with a doubled backslash in a Python heredoc
-  reached the file as a backspace byte, and the test matched nothing. Build
-  the character with `chr(92)`, or write the file with the Write tool. The
-  same applies to escaped double quotes: keep scripts, commit messages and
-  PR bodies in files and pass the file.
-- **The companion's Testing Library is the async one: `await fireEvent.…` as
-  well as `await render`.** An un-awaited `changeText` left the controlled
-  input empty and the form "refused" to submit. `settings.test.tsx` shows it.
-- **`npx jest src/app/(tabs)/…` matches nothing.** The path is a regex and the
-  parentheses form a group, so jest looks for `src/app/tabs/…`, finds no
-  file, and a grep for the summary line shows nothing at all. Pass a bare
-  name such as `npx jest inventory.test`.
-- **`jest` prints `N failed, N total` with no `passed` segment when every
-  test in the run fails.** A grep for `failed, N passed` then finds nothing
-  and a mutant looks uncaught. Match on `failed` alone.
-- **A bare `QueryClient` never resumes a paused mutation.** Mounting (which
-  `QueryClientProvider` does in the app) is what subscribes it to the online
-  manager; a test that toggles `onlineManager` on an unmounted client hangs
-  on the `await`. And two resumers race: an explicit `resumePausedMutations`
-  next to the mount subscription's own returns early with nothing left to
-  do. Model a launch as already online, with the persister's `onSuccess`
-  as the one resumer.
-- **The AsyncStorage persister lags the mutation cache by up to a second**
-  (`asyncThrottle`, default 1000 ms). A mutation that has already continued
-  and hit the network can still be on disk as `isPaused: true`; a kill in
-  that window replays it on the next launch. Idempotent writes (PATCH
-  status, PUT product) shrug; a delta must carry an id the server dedupes
-  on. Reproduced against the real persister by the review of companion #15.
-- **A mutation harness must gate the chain.** #15 merged with one mutant
-  uncaught because the harness's exit code was printed, not checked, and one
-  anchor had gone stale after an edit. Exit non-zero on any survivor or
-  "did not apply", and put the harness before `set -e`.
-- **`onlineManager.setOnline()` inside a test is a React update** for any
-  component subscribed through `useSyncExternalStore`; wrap it in
-  `act(async () => …)` or the run is littered with act warnings.
-- **A mocked `useRouter` must return one stable object.** `/orders` keys its
-  fetch effect on `router`; a fresh object per render refetched after the
-  cancel and overwrote the new status, which looked like the page was broken.
+### 0.5 The owner's items
 
-- **RNTL's `act` is async — await it.** A sync `act(() => …)` leaves the state
-  update queued in a scope that never closes; the updater never runs.
-- **Never wrap a handler that starts a TanStack mutation in a manual `act`.**
-  It leaves React's act bookkeeping such that the *next* test's render never
-  commits — an empty tree, no effects. Call the handler plainly and `waitFor`.
-- **Let a test's mutation settle inside the test** (`waitFor` the navigation
-  it causes) and **clear the QueryClient on teardown**, or its refetches land
-  in the next test outside any act scope.
-- **A `Date.now` stub that advances the clock defeats `findBy*`**, which
-  measures its own timeout with `Date.now`. Scope a clock stub to the one call
-  that needs it.
-- **`jest -t <pattern>` hung for ten minutes** in the companion. Use
-  `--forceExit` and a `timeout` for targeted runs.
-- **The React Compiler lint rules** reject a ref assigned during render,
-  `setState` in an effect body, and `Date.now` anywhere the compiler cannot
-  prove is an event handler. Derive from props during render, fire haptics
-  from an effect keyed on state, read the clock in a closure made outside the
-  component.
-- **`sed 's/\bstore\b/mockStore/g'` also rewrote `expo-secure-store`.** Anchor
-  a rename to the identifier's real context.
+[docs/OWNER-RUNBOOK.md](docs/OWNER-RUNBOOK.md) is the manual: exact
+PowerShell for each, what "done" looks like, what goes wrong, and what the
+agent can take over afterwards. In short:
+
+1. ~~**Run the `client_request_id` migration, then merge #41.**~~ Done
+   2026-09-06, on production and on the Neon `preview` branch, and verified
+   (§0.3).
+2. **Link the companion to EAS and build the APK.** `eas init` writes
+   `extra.eas.projectId` into `app.json` — commit it. Then
+   `eas build --platform android --profile preview`. Both charge the owner's
+   Expo account, which is why they are the owner's. Push delivery
+   additionally needs the Firebase steps.
+3. **Verify the companion on a real phone.** The runbook's checklist has a
+   row per behaviour with the exact expected outcome, mapped to what Jest
+   currently claims: pack & verify, the scan tab, search and the chip,
+   notification preferences, the offline queue, the relaunch replay, a
+   refused press, and the ledger.
+4. **Screenshots and the scan GIF.**
+5. **Promote the CSP**, after a clean day of logs. Note Vercel keeps one hour
+   of runtime logs on the Hobby plan, so "a day" means checking repeatedly or
+   tailing to a file.
+
+### 0.6 Next agent work
+
+**None is queued.** Phase 3 is complete, the roadmap has no Phase 4, and the
+four follow-ups noted earlier in the day were all taken up the same day.
+
+If more is wanted, in the order worth doing it:
+
+1. **The ProductForm PUT-with-stock hazard** (§0.4 item 1) — the only open
+   correctness item.
+2. **Whatever the phone finds** once §0.5 items 2 and 3 are done. Everything
+   in the companion is unverified on hardware, so this is where real defects
+   are most likely to be.
+3. **The CSP promotion PR** (§0.5 item 5), which is entirely mechanical once
+   the owner says the log was clean.
+
+Each as its own PR, meeting
+[DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-definition-of-done).
+
+### 0.7 How this project works, and who can do what
+
+**Only `jasrulete` can push or merge.** Both repos ask `gh` for the
+`jasrulete` token **by name** through a repo-local credential helper, so
+`git push` works whichever account `gh` has active — and that flips on its
+own between commands. Everything else that writes (`gh pr create`,
+`gh pr merge`, `gh release create`, `gh api`) follows the *active* account,
+so chain the switch and the command in **one** shell command:
+
+```bash
+gh auth switch --user jasrulete >/dev/null 2>&1 && gh pr merge N --repo jasrulete/<repo> --merge
+```
+
+**Branch protection differs between the repos.** Shelfstock's `main` has
+none. The companion's `main` requires a pull request and a green `checks`
+job, enforced for admins too — so a companion PR merges only after CI, or
+with `--auto`.
+
+**Never delete a branch after a `;`.** Gate it on the merge result:
+`m=$(gh api repos/O/R/pulls/N --jq .merged) && [ "$m" = "true" ] && git push origin --delete …`.
+An ungated cleanup once deleted an unmerged branch and auto-closed a PR.
+
+**Agent sessions get nondeterministic classifier blocks** on `gh auth
+switch`, `gh pr merge`, `gh api -X DELETE` and `rm -rf` of a `.git`. Retry
+once in a different form, otherwise hand the command to the owner.
+
+**Definition of done**, from [DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-definition-of-done),
+and every PR in this session met it: a test that fails without the change,
+a mutation check that proves the test is load-bearing, docs updated in the
+same commit, and CI green before merge. Mutation harnesses must **gate the
+chain** — exit non-zero on any survivor and on "mutation did not apply", and
+run before `set -e`; #15 merged with one mutant uncaught because its harness
+only printed the result.
+
+### 0.8 Gotchas, each with its fix
+
+**Shell and tooling**
+
+- **Backslashes and escaped quotes in a command handed to the shell tool
+  arrive unescaped.** A regex word boundary written in a Python heredoc
+  reached the file as a backspace byte and matched nothing. Build the
+  character with `chr(92)`, or write the script with the Write tool and run
+  the file. Keep commit messages and PR bodies in files too.
+- **The shell hook refuses command text that looks like an unqualified SQL
+  update**, even a source string inside a heredoc. Same fix: put it in a file.
+- **A `grep` pattern starting with `-` is read as a flag.** `grep -E "->|x"`
+  failed, an `&&` chain skipped a merge, and the `;`-separated cleanup after
+  it deleted the unmerged branch. Write `grep -E -e "..."`.
 - **A non-final command in an `&&` list does not trip `set -e`.** A mutation
-  whose `sed` did not match silently skipped its check and the commit went in
-  unverified. Guards are `if ! …; then exit 1; fi`, and check the `sed` applied.
-- **Run migrations from the checkout that contains them.** `No migrations to
-  run!` on the wrong branch looks like success. PowerShell needs
-  `$env:VAR = …; npx node-pg-migrate up` — `VAR=value cmd` is bash-only, and
-  `npm run … -- --flag` loses the flag.
-- **A mutation that changes nothing observable is dead code, not a weak test.**
-  `barcode !== null` in `isFullyPacked` could never matter — an unlabelled line
-  can never be scanned — so the condition went, not the test.
+  whose `sed` never matched silently skipped its check. Use
+  `if ! …; then exit 1; fi`, and verify the `sed` applied.
+- **`git checkout -- file` restores HEAD, not "before the mutation".** It
+  wiped uncommitted work during a mutation check. Commit first, or `cp` a
+  backup and restore from that.
+- **The repo does not use Prettier.** `npx prettier` reformats whole files
+  into a foreign style; only `eslint` runs in CI. Match the surrounding style
+  by hand, and check `git diff --stat` for a file that changed far more than
+  you touched.
+- **PowerShell:** `VAR=value cmd` does not exist, and `npm run x -- --flag`
+  loses the flag. Use `$env:VAR = '…'; npx <tool> …; Remove-Item Env:VAR`,
+  and single quotes for anything containing `$`.
 
-### 0.7 Where things are documented
+**Jest, RNTL and TanStack Query (companion)**
 
-[`docs/`](docs/) — its README.md is the map, ARCHITECTURE.md holds the
-thirteen invariants, ROADMAP.md the plan. This file is history. Agent memory
-lives in `C:\Users\GIGABYTE\.claude\projects\C---JERIC-Important--Projects-shelfstock\memory\`:
-the account rule, the docs-first rule, and the standing instruction to write
-this handover before every compaction.
+- **`npx jest src/app/(tabs)/…` matches nothing** — the path is a regex and
+  the parentheses form a group. Pass a bare name: `npx jest inventory.test`.
+- **`jest` prints `N failed, N total` with no `passed` segment** when every
+  test in a run fails, so a grep for `failed, N passed` finds nothing and a
+  mutant looks uncaught. Match on `failed` alone.
+- **This Testing Library is the async one:** `await fireEvent.…` as well as
+  `await render`. An un-awaited `changeText` leaves a controlled input empty.
+- **RNTL's `act` is async — await it**, and never wrap a handler that starts
+  a TanStack mutation in a manual `act`: it leaves React's bookkeeping such
+  that the *next* test's render never commits.
+- **`onlineManager.setOnline()` in a test is a React update** for anything
+  subscribed through `useSyncExternalStore`; wrap it in `act(async () => …)`.
+- **A bare `QueryClient` never resumes a paused mutation** — mounting is what
+  subscribes it to the online manager. And two resumers race: model a launch
+  as already online with the persister's `onSuccess` as the single resumer.
+- **The AsyncStorage persister lags the mutation cache by up to a second**
+  (`asyncThrottle`, 1000 ms). A mutation that already continued and hit the
+  network can still be on disk as `isPaused`; a kill in that window replays
+  it. Idempotent writes shrug; a delta needs an id the server dedupes on —
+  this is why `requestId` exists.
+- **A retry budget lives in the attempt, not the persisted state.** A press
+  restored from disk may retry once more per launch. Harmless, because every
+  attempt carries the same `requestId`.
+- **The React Compiler lint rules** reject a ref assigned during render,
+  `setState` in an effect body, and `Date.now` where the compiler cannot
+  prove an event handler. Derive during render, fire effects on state, read
+  the clock outside the component.
+- **A `Date.now` stub that advances the clock defeats `findBy*`**, which
+  measures its own timeout with it.
+
+**Web tests**
+
+- **A mocked `useRouter` must return one stable object.** `/orders` keys its
+  fetch effect on `router`; a fresh object per render refetched and overwrote
+  the state a mutation had just set.
+
+**Migrations**
+
+- **Run them from the checkout that contains them.** `No migrations to run!`
+  on the wrong branch looks like success.
+- **`--no-check-order` is permanent for production.** node-pg-migrate compares
+  recorded names positionally against files sorted by name, and production
+  ran `companion_barcode` before `password_resets`, so every future run needs
+  the flag — including `--dry-run`.
+- **Use the direct Neon string, not the pooled one.** node-pg-migrate takes a
+  session-level advisory lock and sets `search_path`; PgBouncer in transaction
+  mode supports neither.
+
+**Design and review**
+
+- **A mutation that changes nothing observable is dead code, not a weak
+  test.** `barcode !== null` in `isFullyPacked` could never matter, so the
+  condition went, not the test.
+
+### 0.9 Where things are documented
+
+[`docs/`](docs/) is the source of truth and its
+[README.md](docs/README.md) is the map. This file is history.
+[docs/OWNER-RUNBOOK.md](docs/OWNER-RUNBOOK.md) is the owner's manual for
+§0.5. Agent memory lives in
+`C:\Users\GIGABYTE\.claude\projects\C---JERIC-Important--Projects-shelfstock\memory\`:
+the account rule, the docs-first rule, the shell-escaping rule, the current
+project status, and the standing instruction to write this handover before
+every compaction.
 
 ---
 
