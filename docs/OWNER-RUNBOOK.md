@@ -45,11 +45,24 @@ there; say the word and it does that part.
   alter a password that contains one.
 - **Demo accounts.** The admin and shopper logins are in the
   [README's Demo accounts table](../README.md#demo-accounts); where a command
-  below needs the password it says `<demo admin password>`.
+  below needs the password it says `<demo admin password>` — replace that,
+  angle brackets included, before running. Left as is, the login answers
+  "Invalid email or password" and every later call in the same line fails
+  with "Missing or malformed Authorization header".
 - **Merging to `main` is the production release.** Vercel deploys it within
   minutes; there is no staging gate ([OPERATIONS.md](OPERATIONS.md)).
 
 ## 1. Run the production migration, then merge #41
+
+**Done on 2026-09-06.** The migration ran on production, #41 merged as
+`5899b11`, `/api/health` was ok, the malformed-id probe answered 400, and
+the replay proof passed on product 6: the first `+1` wrote ledger row 3
+carrying its request id, the identical request was answered
+`replayed: true` with that same row and wrote nothing, and the `-1` wrote
+row 4 — two new rows, not three, stock back where it started. Not confirmed
+from the terminal transcript: step 6, the Neon `preview` branch; if it was
+skipped, PR previews fail on every stock move until it is run. The steps
+stay here for the next schema change.
 
 **Why.** The companion now sends a `requestId` with every stepper press so a
 press replayed after the app is killed is applied once. Shelfstock
@@ -170,6 +183,8 @@ pooler, not a real migration: run again, or add `--no-lock`.)
    stock — a malformed `requestId` against a product id that does not exist.
    The new code answers **400** before opening a transaction; the old code
    answers **404**, which means the deploy is not live yet, so wait and retry.
+   Put the real demo admin password in place of `<demo admin password>`
+   first (§0).
 
    ```bash
    $login = Invoke-RestMethod -Method Post -Uri 'https://shelfstock-jer2x.vercel.app/api/auth/login' -ContentType 'application/json' -Body '{"email":"admin@shelfstock.demo","password":"<demo admin password>"}'; $r = Invoke-WebRequest -SkipHttpErrorCheck -Method Post -Uri 'https://shelfstock-jer2x.vercel.app/api/products/999999/adjust-stock' -Headers @{ Authorization = "Bearer $($login.token)" } -ContentType 'application/json' -Body '{"delta":1,"source":"companion","requestId":"bad id"}'; $r.StatusCode; $r.Content
