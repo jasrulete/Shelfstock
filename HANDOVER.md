@@ -37,6 +37,10 @@ has left the emulator-free test suite, and it retires the single largest gap
 in the evidence. What it proves and what it does not is in §0.3; the rest of
 the device checklist is still ahead.
 
+**Also 2026-09-12: five advisories published since 2026-09-06 turned CI red,
+and the dependency floors were raised** (#49). One was a critical Next.js
+RCE in the Image Optimization API, which this app uses. Details in §0.2a.
+
 What follows is the state, what was built and how each claim was checked,
 what is knowingly not done, and the working agreements that made it go. The
 sections below §0 are the older logs.
@@ -135,6 +139,39 @@ accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
 
 Note the merge order: #42 and #43 landed **before** #41, because #41 was held
 until the owner had run its migration.
+
+### 0.2a The dependency fix of 2026-09-12
+
+Nothing in the repo changed; the world did. Six days after the last green
+run, `npm audit --omit=dev --audit-level=high` began failing on five
+advisories published in between — and CI's audit step is what caught it, on
+a documentation PR that had nothing to do with any of them.
+
+| Package | Was | Now | Why it mattered |
+|---|---|---|---|
+| `next` | 15.5.22 | **15.5.25** | **Critical.** Unauthenticated RCE in the Image Optimization API when AVIF is used (GHSA-2xp9-vwfh-vxw4) — this app serves every product photo through `next/image`, so it was reachable. A second RCE (GHSA-p293-qw3h-jr36) only affects Windows-hosted servers, which Vercel is not. |
+| `sharp` | 0.35.3 | **0.35.4** | High: libheif vulnerabilities behind the same image pipeline. |
+| `body-parser` | 1.20.6 | **1.20.8** | Pulled a vulnerable `qs`. |
+| `qs` | 6.15.3 | **6.16.0** | Moderate: an array-limit bypass and a DoS through attacker-controlled input, in the parser that reads every query string the API receives. |
+
+`next` and `sharp` came from `npm audit fix` plus raised floors in
+`package.json`. `qs` needed an override: `express@4` declares `~6.15.1` and
+every version in that range is vulnerable, express 4 has no patched release,
+and the fix upstream is express 5 — a major upgrade that changes routing and
+error handling, which is not a trade worth making for a query parser.
+`body-parser` already wanted `~6.16.0`, so the override simply converges the
+tree on one patched copy. The reasoning is written into
+`_comment_overrides` in `frontend/package.json`, beside the three pins that
+were already there for the same reason.
+
+Verified before merging: `npm audit --omit=dev` reports **0 vulnerabilities**
+at every severity, lint and `tsc` clean, **303/303** tests, `docs:check`
+clean, and `npm run build` succeeds — the last being the one that matters for
+a Next upgrade.
+
+**`main` was red for the length of one PR.** #48 was merged while the App
+check was failing, because the merge chain gated on `gh pr merge` succeeding
+rather than on the checks. The cause and the fix are in §0.8.
 
 ### 0.3 What is verified, and how
 
@@ -291,6 +328,18 @@ only printed the result.
 - **A `grep` pattern starting with `-` is read as a flag.** `grep -E "->|x"`
   failed, an `&&` chain skipped a merge, and the `;`-separated cleanup after
   it deleted the unmerged branch. Write `grep -E -e "..."`.
+- **Piping `gh pr checks` throws its exit code away, and a merge chain that
+  reads like a gate then is not one.** `gh pr checks N --watch | tail | awk`
+  exits with `awk`'s status, which is always 0, so `&& gh pr merge` runs even
+  when a check failed — which is how #48 landed on a red `main`. Capture the
+  status before formatting:
+  `gh pr checks N --watch > out.txt 2>&1; rc=$?; tail -4 out.txt; [ $rc -eq 0 ] || exit 1`.
+  Note the web repo's `main` has no branch protection to catch this; the
+  companion's does.
+- **CI's `npm audit` step fails on advisories published since the last run**,
+  so a green PR can go red days later without a line of code changing — and
+  the failure surfaces on whatever PR happens to be open next. Read the
+  failing step before assuming your own diff caused it.
 - **A non-final command in an `&&` list does not trip `set -e`.** A mutation
   whose `sed` never matched silently skipped its check. Use
   `if ! …; then exit 1; fi`, and verify the `sed` applied.
