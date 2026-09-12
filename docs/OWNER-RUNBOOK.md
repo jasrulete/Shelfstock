@@ -1,9 +1,9 @@
 # Owner's runbook
 
 The five things only you can do, in the order that works, with what "done"
-looks like for each. Written 2026-09-06, and task 1 has since been done:
-Shelfstock `main` is at the merge of #45, the companion at the merge of #17,
-and nothing is held. Every command was checked against the code, the tools'
+looks like for each. Written 2026-09-06. Task 1 is done, and task 2 is mostly
+done — the APK is built, installed and signing in. Shelfstock `main` is at
+the merge of #48, the companion at the merge of #20, and nothing is held. Every command was checked against the code, the tools'
 own help, or run here; where something could not be verified it says so.
 
 | # | Task | Time | Depends on |
@@ -214,10 +214,23 @@ the verification down.
 
 ## 2. Link the companion to EAS and build the APK
 
-**Why.** No APK has been built from any of this month's companion work, and
-push tokens cannot register until `app.json` carries `extra.eas.projectId`,
-which `eas init` writes. Both `eas init` and `eas build` change your Expo
-account (a project, a keystore, build minutes), which is why they are yours.
+**Mostly done.** `eas init` ran, its `app.json` changes are committed
+(companion #20), the `preview` APK was built (build
+`826ba500-7f52-43a6-bf53-948bc1429678`, version 1.0.0) and it is installed on
+your device and signing in against production. Three things are left, and
+none of them blocks task 3:
+
+- **Rebuild before releasing.** The installed binary predates companion #20,
+  so it still asks for `RECORD_AUDIO`. Step 3 below, unchanged, produces a
+  clean one.
+- **Firebase**, if push should actually arrive — step 6.
+- **The GitHub Release** — step 7.
+
+**Why it mattered.** No APK had been built from any of this month's companion
+work, and push tokens cannot register until `app.json` carries
+`extra.eas.projectId`, which `eas init` writes. Both `eas init` and
+`eas build` change your Expo account (a project, a keystore, build minutes),
+which is why they are yours.
 
 ### Steps
 
@@ -333,6 +346,10 @@ already has the real one.)
 **Why.** Pack & verify and everything the companion gained this month exist
 only under Jest with a mocked camera and a mocked network. The checklist
 below names what each Jest test claims, so you can see it happen for real.
+
+**Started: sign-in passes.** You installed the APK and logged in as an admin
+on 2026-09-12, which clears the first row of section A's prerequisites and
+proves the build points at production. Everything below is still ahead.
 
 **Two ways to run it.** The APK from task 2 (needed for anything involving
 push), or Expo Go for everything else: in the companion folder,
