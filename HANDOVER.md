@@ -23,14 +23,23 @@ file to pick up where the last one left off — start at §0.
 
 ---
 
-## 0. Handover — 2026-09-06 (current; read this first)
+## 0. Handover — 2026-09-12 (current; read this first)
 
-**Nothing is queued for the agent. Four things are waiting for the owner, and
-they all need a phone or a browser rather than a keyboard.** The roadmap is
-finished except for screenshots; both repos are clean on `main` with no open
-PRs; every suite is green. What follows is the state, what was built and how
-each claim was checked, what is knowingly not done, and the working
-agreements that made it go. The sections below §0 are the older logs.
+**Nothing is queued for the agent. The remaining work is the owner's and
+needs a phone or a browser rather than a keyboard.** The roadmap is finished
+except for screenshots; both repos are clean on `main` with no open PRs;
+every suite is green.
+
+**Newest progress (2026-09-12): the app runs on a real phone.** The owner
+installed the preview APK on an Android device and signed in as an admin
+against production. That is the first time any of this month's companion work
+has left the emulator-free test suite, and it retires the single largest gap
+in the evidence. What it proves and what it does not is in §0.3; the rest of
+the device checklist is still ahead.
+
+What follows is the state, what was built and how each claim was checked,
+what is knowingly not done, and the working agreements that made it go. The
+sections below §0 are the older logs.
 
 If you are an agent picking this up: read §0.1 through §0.4, then
 [docs/](docs/). Do not treat this file as a specification — `docs/` is the
@@ -40,7 +49,7 @@ source of truth, and §0.9 says which document owns what.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #47, this handover | the merge of #18 |
+| `main` | the merge of #48, this handover | the merge of #20 |
 | Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
 | Remote branches | `main` only | `main` only |
@@ -48,7 +57,7 @@ source of truth, and §0.9 says which document owns what.
 | Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
 | Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI |
 | Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
-| Production | Vercel deploys `main` automatically, so everything through #47 is live | **No APK exists.** EAS is not initialised — `app.json` has no `extra.eas.projectId` — so no build has ever carried this month's work, and push tokens cannot register |
+| Production | Vercel deploys `main` automatically, so everything through #48 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
 
 Numbers of record: **13 invariants** (INV-1…INV-13) in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
@@ -120,8 +129,9 @@ accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
 | #40 | self-cancel in the E2E smoke | #15, #16 | offline queue, step 2 |
 | #41 | `requestId` dedupe (held) | #17 | transport retry |
 | #42, #43 | handover, owner's runbook | #18 | docs truth pass |
-| #44, #45 | handover | | |
-| #46, #47 | docs truth pass, this handover | | |
+| #44, #45 | handover | #19 | build artifacts kept out of git |
+| #46, #47 | docs truth pass, handover | #20 | EAS project id, minus the microphone |
+| #48 | this handover | | |
 
 Note the merge order: #42 and #43 landed **before** #41, because #41 was held
 until the owner had run its migration.
@@ -139,9 +149,19 @@ strength of a passing unit test alone.
 | Order lifecycle, barcodes, CSP endpoint, health | **On production**, but on 2026-09-05 and therefore *before* #32 | earlier session |
 | The offline queue, the stepper, pack & verify, push preferences | **Jest only**, with a mocked camera and a mocked network | companion suites |
 | Every behaviour change in both repos | A test that fails without the change, then a **mutation check** proving the test is load-bearing — 12 mutants for the stepper alone, 4 more for the retry, 4 for the server dedupe | per PR |
+| The APK installs, runs, and authenticates | **On a real Android device**, 2026-09-12: the owner installed the `preview` build and signed in as an admin against production | owner reported it |
 
-**No companion behaviour has ever run on a phone from this month's work.**
-That is §0.5 item 2, and it is the single largest gap in the evidence.
+What the sign-in proves, precisely: the APK installs and launches on a real
+device; `EXPO_PUBLIC_API_URL` was baked correctly, because the app reached
+`https://shelfstock-jer2x.vercel.app` rather than the `10.0.2.2` fallback
+(C-INV-5); `POST /api/auth/login` works from the device, the JWT is accepted
+by `expo-secure-store`, the admin-only gate lets an admin through, and the
+tab shell renders.
+
+It proves nothing about the rest. Pack & verify, the scanner, the stepper,
+the offline queue and its relaunch replay, the low-stock chip, and the
+notification preferences are all still **Jest-only**. That checklist is
+§0.5 item 3 and it is now the most valuable thing anyone can do with an hour.
 
 ### 0.4 Known gaps, named and not done
 
@@ -155,15 +175,26 @@ That is §0.5 item 2, and it is the single largest gap in the evidence.
    comment. Roadmap §4.1 is the only roadmap row not done.
 3. **The CSP is still report-only.** Promotion is one string literal plus two
    test assertions plus a docs pass; it waits on a clean day of logs.
-4. **Android push cannot be delivered yet.** Beyond `eas init`, it needs a
-   Firebase project, `google-services.json` committed, and the FCM key
-   uploaded through `eas credentials`. None of that exists.
-5. **Local clutter in the web checkout**, mentioned nowhere else: a second
+4. **Android push cannot be delivered yet.** `eas init` is done, so a token
+   can be *requested*; delivery needs a Firebase project,
+   `google-services.json` committed, and the FCM V1 key uploaded through
+   `eas credentials`. None of that exists, so the Settings switch will fail
+   with "Could not update notifications" and no notification will arrive.
+5. **The installed APK asks for the microphone.** It was built before
+   companion #20, which set `recordAudioAndroid: false` and dropped
+   `android.permission.RECORD_AUDIO` — `expo-camera` adds it by default and
+   this app never touches audio. The repo is fixed; **the binary is not**.
+   Rebuild before cutting v1.0.0, or the release ships asking a stockroom
+   admin for microphone access it never uses.
+6. **No release exists.** No git tag, no GitHub Release, and the 125 MB APK
+   sits untracked in the companion folder (ignored since #19). ADR-0008 says
+   the APK ships as a GitHub Release; that has not happened.
+7. **Local clutter in the web checkout**, mentioned nowhere else: a second
    worktree at `.claude/worktrees/handover-session` pinned to `902740e` on
    `claude/password-reset`, five stale local branches, and a stale
    `origin/claude/adjust-stock-idempotency` tracking ref. The remote is
    clean; `git fetch --prune` and `git worktree remove` would tidy it.
-6. **`docs/ROADMAP.md` is a plan, not a status board**, and now says so. Two
+8. **`docs/ROADMAP.md` is a plan, not a status board**, and now says so. Two
    of its decisions were reversed while building — the idempotency key it cut
    and the offline queue's "step 1 only" — and both are flagged in place.
 
@@ -176,16 +207,19 @@ agent can take over afterwards. In short:
 1. ~~**Run the `client_request_id` migration, then merge #41.**~~ Done
    2026-09-06, on production and on the Neon `preview` branch, and verified
    (§0.3).
-2. **Link the companion to EAS and build the APK.** `eas init` writes
-   `extra.eas.projectId` into `app.json` — commit it. Then
-   `eas build --platform android --profile preview`. Both charge the owner's
-   Expo account, which is why they are the owner's. Push delivery
-   additionally needs the Firebase steps.
-3. **Verify the companion on a real phone.** The runbook's checklist has a
-   row per behaviour with the exact expected outcome, mapped to what Jest
-   currently claims: pack & verify, the scan tab, search and the chip,
-   notification preferences, the offline queue, the relaunch replay, a
-   refused press, and the ledger.
+2. **Link the companion to EAS and build the APK** — **mostly done.**
+   `eas init` ran and its `app.json` changes are committed (companion #20);
+   the `preview` APK was built, installed on a device, and signs in
+   (§0.3). What is left: **rebuild** so the binary drops the microphone
+   permission (§0.4 item 5), the **Firebase** setup if push should actually
+   arrive (§0.4 item 4), and the **GitHub Release** (§0.4 item 6).
+3. **Verify the companion on a real phone** — **started.** Sign-in passes.
+   The runbook's checklist has a row per behaviour with the exact expected
+   outcome, mapped to what Jest currently claims: pack & verify, the scan
+   tab, search and the chip, notification preferences, the offline queue,
+   the relaunch replay, a refused press, and the ledger. Everything except
+   sign-in is still unverified on hardware, so this is where real defects
+   are most likely to surface.
 4. **Screenshots and the scan GIF.**
 5. **Promote the CSP**, after a clean day of logs. Note Vercel keeps one hour
    of runtime logs on the Hobby plan, so "a day" means checking repeatedly or
