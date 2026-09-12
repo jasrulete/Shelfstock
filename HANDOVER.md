@@ -53,7 +53,7 @@ source of truth, and §0.9 says which document owns what.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #48, this handover | the merge of #20 |
+| `main` | the merge of #49 (dependency floors) | the merge of #20 |
 | Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
 | Remote branches | `main` only | `main` only |
@@ -61,7 +61,7 @@ source of truth, and §0.9 says which document owns what.
 | Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
 | Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI |
 | Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
-| Production | Vercel deploys `main` automatically, so everything through #48 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
+| Production | Vercel deploys `main` automatically, so everything through #49 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
 
 Numbers of record: **13 invariants** (INV-1…INV-13) in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
