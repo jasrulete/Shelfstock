@@ -18,7 +18,7 @@
 > Then **§3 and §3a**, the record of what was built and how each claim was
 > verified. That is history, and history does not go stale.
 
-Written 2026-08-03, last updated 2026-09-06. Point a new conversation at this
+Written 2026-08-03, last updated 2026-09-14. Point a new conversation at this
 file to pick up where the last one left off — start at §0.
 
 ---
@@ -37,6 +37,13 @@ has left the emulator-free test suite, and it retires the single largest gap
 in the evidence. What it proves and what it does not is in §0.3; the rest of
 the device checklist is still ahead.
 
+**2026-09-14: a full state audit and a read-only auth review.** The audit
+re-ran every check in §0.1 and confirmed every number; what it found wrong was
+eight lines of documentation drift, fixed in #51 — the one substantive miss
+being that `docs/DATA-MODEL.md` had never described the `categories` table.
+The auth review found no critical, high or medium issue; its four low findings
+are recorded as §0.4 item 9 and are **not fixed**.
+
 **Also 2026-09-12: five advisories published since 2026-09-06 turned CI red,
 and the dependency floors were raised** (#49). One was a critical Next.js
 RCE in the Image Optimization API, which this app uses. Details in §0.2a.
@@ -53,15 +60,15 @@ source of truth, and §0.9 says which document owns what.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #49 (dependency floors) | the merge of #20 |
+| `main` | the merge of #51 (docs bookkeeping) | the merge of #20 |
 | Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
 | Remote branches | `main` only | `main` only |
-| Tests | **303 passing in 28 files** — `server` project 244 in 20, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **101 passing in 18 suites**, ~27 s (`npx jest`) |
+| Tests | **303 passing in 28 files** — `server` project 244 in 20, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **101 passing in 18 suites** (`npx jest`) |
 | Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
 | Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI |
 | Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
-| Production | Vercel deploys `main` automatically, so everything through #49 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
+| Production | Vercel deploys `main` automatically, so everything through #51 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
 
 Numbers of record: **13 invariants** (INV-1…INV-13) in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
@@ -135,7 +142,10 @@ accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
 | #42, #43 | handover, owner's runbook | #18 | docs truth pass |
 | #44, #45 | handover | #19 | build artifacts kept out of git |
 | #46, #47 | docs truth pass, handover | #20 | EAS project id, minus the microphone |
-| #48 | this handover | | |
+| #48 | handover: the phone signs in | | |
+| #49 | dependency floors (§0.2a) | | |
+| #50 | handover tip | | |
+| #51 | docs bookkeeping after the 2026-09-14 audit; `categories` in DATA-MODEL | | |
 
 Note the merge order: #42 and #43 landed **before** #41, because #41 was held
 until the owner had run its migration.
@@ -228,12 +238,29 @@ notification preferences are all still **Jest-only**. That checklist is
    the APK ships as a GitHub Release; that has not happened.
 7. **Local clutter in the web checkout**, mentioned nowhere else: a second
    worktree at `.claude/worktrees/handover-session` pinned to `902740e` on
-   `claude/password-reset`, five stale local branches, and a stale
-   `origin/claude/adjust-stock-idempotency` tracking ref. The remote is
-   clean; `git fetch --prune` and `git worktree remove` would tidy it.
+   `claude/password-reset`, and six stale local branches (five `claude/*`
+   and `worktree-handover-session`). The remote is clean and already pruned;
+   `git worktree remove` and `git branch -d` would tidy it.
 8. **`docs/ROADMAP.md` is a plan, not a status board**, and now says so. Two
    of its decisions were reversed while building — the idempotency key it cut
    and the offline queue's "step 1 only" — and both are flagged in place.
+
+9. **Four low-severity auth findings from the 2026-09-14 review, none
+   fixed.** (a) `frontend/app/login/page.tsx` guards `?next=` with a
+   string-prefix check that a backslash slips past — `/login?next=/%5Cevil.com`
+   lands a genuinely signed-in user on `evil.com`; resolve with `new URL()` and
+   compare origins. (b) `frontend/scripts/create-admin.js` and
+   `seed-demo-users.js` connect to Neon with `rejectUnauthorized: false`,
+   unlike the server's own pool; an on-path attacker gets the database
+   credential. (c) Login and forgot-password answer faster for an unknown
+   email than a known one (bcrypt and the mail send only run on the known
+   branch), so timing tells accounts apart even though the bodies match.
+   (d) Nothing in the runbook says how to kill a stolen admin phone's 7-day
+   token: rotate `JWT_SECRET` in Vercel and redeploy. Eight further
+   informational notes — an atomic single-use claim for reset tokens,
+   `'unsafe-eval'` in the CSP, a constant-time `CRON_SECRET` compare,
+   `poweredByHeader`, and the like — are in the review, which was not
+   committed.
 
 ### 0.5 The owner's items
 

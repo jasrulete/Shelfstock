@@ -15,6 +15,8 @@ users ──┬──< orders ──< order_items >── products ──┬─�
         ├──< password_resets
         ├──< device_tokens
         └──< winback_emails
+
+categories          standalone: nothing references it by key
 ```
 
 ### `users`
@@ -45,6 +47,15 @@ The constraint name `products_barcode_key` is **load-bearing**: the 409 path
 matches on a `23505` whose constraint name contains `barcode`, to tell this
 conflict apart from any other unique violation. Renaming it silently turns a
 clear 409 into a 500.
+
+### `categories`
+
+`id` SERIAL PK, `name` VARCHAR(100) UNIQUE NOT NULL. Seeded with five names
+by the baseline. **Nothing references it by key** — `products.category` is
+free text — so it is a list of suggestions, not a constraint.
+`GET /api/categories` returns the union of this table and every distinct
+`products.category`, which is why a category an admin types onto a product
+shows up in the storefront filter without a row here.
 
 ### `orders`
 
