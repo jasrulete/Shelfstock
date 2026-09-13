@@ -3,7 +3,7 @@
 The five things only you can do, in the order that works, with what "done"
 looks like for each. Written 2026-09-06. Task 1 is done, and task 2 is mostly
 done — the APK is built, installed and signing in. Shelfstock `main` is at
-the merge of #48, the companion at the merge of #20, and nothing is held. Every command was checked against the code, the tools'
+the merge of #51, the companion at the merge of #20, and nothing is held. Every command was checked against the code, the tools'
 own help, or run here; where something could not be verified it says so.
 
 | # | Task | Time | Depends on |
