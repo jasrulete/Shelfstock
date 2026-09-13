@@ -42,7 +42,8 @@ re-ran every check in §0.1 and confirmed every number; what it found wrong was
 eight lines of documentation drift, fixed in #51 — the one substantive miss
 being that `docs/DATA-MODEL.md` had never described the `categories` table.
 The auth review found no critical, high or medium issue; its four low findings
-are recorded as §0.4 item 9 and are **not fixed**.
+were fixed the same day (#52) — §0.4 item 9 says what they were, and lists the
+review's informational notes, which are still open.
 
 **Also 2026-09-12: five advisories published since 2026-09-06 turned CI red,
 and the dependency floors were raised** (#49). One was a critical Next.js
@@ -60,15 +61,15 @@ source of truth, and §0.9 says which document owns what.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #51 (docs bookkeeping) | the merge of #20 |
+| `main` | the merge of #52 (auth review fixes) | the merge of #20 |
 | Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
 | Remote branches | `main` only | `main` only |
-| Tests | **303 passing in 28 files** — `server` project 244 in 20, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **101 passing in 18 suites** (`npx jest`) |
+| Tests | **315 passing in 29 files** — `server` project 256 in 21, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **101 passing in 18 suites** (`npx jest`) |
 | Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
 | Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI |
 | Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
-| Production | Vercel deploys `main` automatically, so everything through #51 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
+| Production | Vercel deploys `main` automatically, so everything through #52 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
 
 Numbers of record: **13 invariants** (INV-1…INV-13) in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
@@ -146,6 +147,7 @@ accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
 | #49 | dependency floors (§0.2a) | | |
 | #50 | handover tip | | |
 | #51 | docs bookkeeping after the 2026-09-14 audit; `categories` in DATA-MODEL | | |
+| #52 | the auth review's four low findings | | |
 
 Note the merge order: #42 and #43 landed **before** #41, because #41 was held
 until the owner had run its migration.
@@ -245,22 +247,32 @@ notification preferences are all still **Jest-only**. That checklist is
    of its decisions were reversed while building — the idempotency key it cut
    and the offline queue's "step 1 only" — and both are flagged in place.
 
-9. **Four low-severity auth findings from the 2026-09-14 review, none
-   fixed.** (a) `frontend/app/login/page.tsx` guards `?next=` with a
-   string-prefix check that a backslash slips past — `/login?next=/%5Cevil.com`
-   lands a genuinely signed-in user on `evil.com`; resolve with `new URL()` and
-   compare origins. (b) `frontend/scripts/create-admin.js` and
-   `seed-demo-users.js` connect to Neon with `rejectUnauthorized: false`,
-   unlike the server's own pool; an on-path attacker gets the database
-   credential. (c) Login and forgot-password answer faster for an unknown
-   email than a known one (bcrypt and the mail send only run on the known
-   branch), so timing tells accounts apart even though the bodies match.
-   (d) Nothing in the runbook says how to kill a stolen admin phone's 7-day
-   token: rotate `JWT_SECRET` in Vercel and redeploy. Eight further
-   informational notes — an atomic single-use claim for reset tokens,
-   `'unsafe-eval'` in the CSP, a constant-time `CRON_SECRET` compare,
-   `poweredByHeader`, and the like — are in the review, which was not
-   committed.
+9. **The 2026-09-14 auth review: four low findings, fixed in #52; eight
+   informational notes, open.** Fixed: (a) the login page's `?next=` guard
+   was a string-prefix check that a backslash slipped past —
+   `/login?next=/%5Cevil.com` sent a genuinely signed-in user to `evil.com`;
+   `lib/safeNext.ts` now resolves the value as the router will and compares
+   origins, with ten cases in `tests/safeNext.test.ts`. (b) The two operator
+   scripts connected to Neon with certificate verification off; they now use
+   the server pool's rule. (c) Login and forgot-password answered faster for
+   an unknown address than a known one — the bodies matched, the clock did
+   not; login now runs bcrypt against a fixed hash on the unknown path, and
+   forgot-password answers after one `SELECT` for both, deferring the token
+   write and the mail through `afterResponse()` (INV-9). (d) Nothing said how
+   to end a stolen admin phone's 7-day session; OPERATIONS.md §6 now has "A
+   lost or stolen admin device" — rotate `JWT_SECRET`, redeploy — and KW-3
+   and KW-4 point at it. **Still open, informational, in the order worth
+   doing:** the reset-token single-use check is read-then-write rather than
+   one atomic `UPDATE … WHERE used_at IS NULL RETURNING`; `adjust-stock`'s
+   replay lookup is keyed on `client_request_id` alone rather than with
+   `product_id`; `script-src` carries `'unsafe-eval'`, which only `next dev`
+   needs, and should go before the CSP is promoted; `CRON_SECRET` is compared
+   with `!==` rather than `timingSafeEqual`; `poweredByHeader: false` is not
+   set; the companion registers its 401 handler in an effect, so a replay
+   that 401s before the first commit is swallowed; `android.allowBackup` is
+   unset, so the products cache is in device backups; and the companion's
+   `npm audit --omit=dev` shows 22 advisories, all in Expo build tooling,
+   with no audit step in its CI. The review itself was not committed.
 
 ### 0.5 The owner's items
 

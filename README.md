@@ -280,7 +280,7 @@ adapter. `pages/` and `app/` coexisting is intentional.
 
 ## Testing
 
-**API tests** — 244 Vitest + Supertest tests with the database mocked, covering
+**API tests** — 256 Vitest + Supertest tests with the database mocked, covering
 auth middleware, registration/login (including the email-enumeration defense
 and email-format validation, which login deliberately skips so accounts
 predating the rule can still sign in), pagination caps and sort-column

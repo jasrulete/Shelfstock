@@ -10,9 +10,18 @@ if (!email) {
   process.exit(1);
 }
 
+const connectionString = process.env.DATABASE_URL;
+// Same rule as server/db/index.ts: local Postgres speaks plaintext, a hosted
+// one gets TLS with the certificate verified. This script carries the
+// credential that can promote an account to admin, so it is the last place to turn verification off.
+const isLocal =
+  connectionString?.includes('localhost') ||
+  connectionString?.includes('127.0.0.1') ||
+  connectionString?.includes('@db:');
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
+  connectionString,
+  ssl: isLocal ? false : { rejectUnauthorized: true },
 });
 
 pool

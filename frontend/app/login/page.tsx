@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { auth } from "@/lib/auth";
+import { safeNext } from "@/lib/safeNext";
 import { User } from "@/types";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
@@ -42,10 +43,10 @@ function LoginForm() {
         },
       );
       auth.saveSession(res.token, res.user);
-      // Only follow internal paths - a next param like "https://evil.com"
-      // must never redirect the user off-site after login.
-      const next = searchParams?.get("next");
-      router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
+      // Only follow paths on this site - a next param like "https://evil.com",
+      // "//evil.com" or "/\evil.com" must never send the user off-site after
+      // login. safeNext resolves it the way the router will and compares origins.
+      router.push(safeNext(searchParams?.get("next"), window.location.origin));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {

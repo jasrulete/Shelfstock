@@ -215,6 +215,23 @@ describe('POST /api/auth/login', () => {
     expect(wrongPw.body.error).toBe(unknown.body.error);
   });
 
+  it('runs the password check for an unknown email too, so timing does not reveal registration', async () => {
+    // An unknown address used to answer straight after the SELECT, while a
+    // known one paid for a bcrypt compare first - same body, tens of
+    // milliseconds apart. Both branches must do the compare.
+    const compare = vi.spyOn(bcrypt, 'compare');
+    try {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'ghost@example.com', password: 'whatever1' });
+
+      expect(res.status).toBe(401);
+      expect(compare).toHaveBeenCalledTimes(1);
+    } finally {
+      compare.mockRestore();
+    }
+  });
+
   it('logs in with correct credentials and never leaks the password hash', async () => {
     const hash = await bcrypt.hash('correct-password', 4);
     poolQuery.mockResolvedValueOnce({
