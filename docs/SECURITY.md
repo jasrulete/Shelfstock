@@ -34,14 +34,14 @@ Three things cross a boundary and are worth naming:
 |---|---|---|
 | Password hashing | `bcryptjs` | Reads `$2b$` hashes written by native bcrypt — verified before the swap. |
 | JWT signing | `jsonwebtoken`, `JWT_SECRET` | 32-byte random, per-environment. Preview has its **own**, not production's. |
-| Reset tokens | 32 CSPRNG bytes, stored SHA-256 hashed | Single use, 1 hour, issuing one retires the rest. The raw value exists only in the mail. |
+| Reset tokens | 32 CSPRNG bytes, stored SHA-256 hashed | Single use — the claim and the password write are one statement, so two requests racing on a token cannot both pass — 1 hour, issuing one retires the rest. The raw value exists only in the mail. |
 | No account oracle | `/login`, `/forgot-password`, `/reset-password` | Identical responses for known/unknown, expired/used — and identical work before responding, so timing does not tell them apart either: login runs bcrypt against a fixed hash when the address is unknown, and forgot-password answers after one `SELECT` for both, with the token write and the mail deferred through `afterResponse()`. `/register` answers 409 for a taken address by design; a sign-up form has to say so. |
 | Email validation on register | Normalized address, ≤254 chars | Probed against a running stack: plus tags, subdomains and unicode local parts accepted; `user@localhost`, doubled dots, tabs and CRLF injection refused. |
 | Ownership checks | `GET /api/orders/:id`, `DELETE /api/devices/:token` | Non-owner gets **404, not 403** — a 403 confirms the id exists. |
 | SQL injection | Parameterised queries throughout | `%` and `_` in a search term are escaped rather than treated as wildcards. |
 | XSS in JSON-LD | `serializeJsonLd` | `JSON.stringify` does not escape `<`, and product names are admin-typed. |
 | API headers | `helmet()` on `/api` | |
-| Page headers | `next.config.js` `headers()` | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and a CSP — see [KW-1](#kw-1--the-jwt-lives-in-localstorage). |
+| Page headers | `next.config.js` `headers()` | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and a CSP — see [KW-1](#kw-1--the-jwt-lives-in-localstorage). `X-Powered-By` is off (`poweredByHeader: false`). |
 | No internal detail in errors | Terminal handler + `error.tsx` | [INV-7](ARCHITECTURE.md#inv-7--every-api-response-is-json-and-never-carries-an-internal-message). |
 | Rate limiting | 500/15min global, 20/15min auth | [KW-2](#kw-2--rate-limiting-is-per-instance). |
 | Dependency audit | CI, `npm audit --omit=dev --audit-level=high` | Fails the build. |
@@ -82,6 +82,10 @@ else. Two consequences follow:
   someone changes that test on purpose. **Do not promote without reading the
   report first** — an unverified enforcing CSP breaks the storefront for real
   visitors.
+- `script-src` allows `'unsafe-inline'` — that is the residual above — but not
+  `'unsafe-eval'`: only `next dev` evals, so `next.config.js` adds it under
+  `NODE_ENV=development` alone, and `tests/securityHeaders.test.ts` pins that
+  the policy that ships is without it.
 
 The report endpoint is necessarily unauthenticated, so anyone can POST to it.
 What bounds that: a 50 kB body limit on the route's own parser, the global rate

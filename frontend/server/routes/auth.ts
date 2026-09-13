@@ -239,23 +239,29 @@ router.post('/reset-password', async (req, res) => {
   const invalid = { error: 'This reset link is invalid or has expired' };
 
   try {
-    const found = await pool.query(
-      `SELECT id, user_id, expires_at, used_at
-       FROM password_resets WHERE token_hash = $1`,
-      [hashToken(token)]
-    );
-    const reset = found.rows[0];
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-    if (!reset || reset.used_at || new Date(reset.expires_at).getTime() <= Date.now()) {
+    // One statement claims the token and writes the password. The claim's
+    // WHERE is the whole single-use and expiry check, so two requests racing
+    // on the same token cannot both pass a read-then-write, and a token is
+    // never burned without the password having changed. Zero rows back means
+    // unknown, expired or used - the database does not say which, and
+    // neither do we.
+    const claimed = await pool.query(
+      `WITH claimed AS (
+         UPDATE password_resets SET used_at = now()
+          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+          RETURNING user_id
+       )
+       UPDATE users SET password_hash = $2
+         FROM claimed
+        WHERE users.id = claimed.user_id
+        RETURNING users.id`,
+      [hashToken(token), passwordHash]
+    );
+    if (claimed.rows.length === 0) {
       return res.status(400).json(invalid);
     }
-
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-      passwordHash,
-      reset.user_id,
-    ]);
-    await pool.query('UPDATE password_resets SET used_at = now() WHERE id = $1', [reset.id]);
 
     res.json({ message: 'Your password has been changed. You can sign in with it now.' });
   } catch (err) {

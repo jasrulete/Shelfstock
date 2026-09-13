@@ -42,8 +42,8 @@ re-ran every check in §0.1 and confirmed every number; what it found wrong was
 eight lines of documentation drift, fixed in #51 — the one substantive miss
 being that `docs/DATA-MODEL.md` had never described the `categories` table.
 The auth review found no critical, high or medium issue; its four low findings
-were fixed the same day (#52) — §0.4 item 9 says what they were, and lists the
-review's informational notes, which are still open.
+were fixed the same day (#52) and its eight informational notes the day after
+(#53, companion #21) — §0.4 item 9 has the list.
 
 **Also 2026-09-12: five advisories published since 2026-09-06 turned CI red,
 and the dependency floors were raised** (#49). One was a critical Next.js
@@ -61,15 +61,15 @@ source of truth, and §0.9 says which document owns what.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #52 (auth review fixes) | the merge of #20 |
+| `main` | the merge of #53 (auth review, informational notes) | the merge of #21 |
 | Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
 | Remote branches | `main` only | `main` only |
-| Tests | **315 passing in 29 files** — `server` project 256 in 21, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **101 passing in 18 suites** (`npx jest`) |
+| Tests | **321 passing in 30 files** — `server` project 262 in 22, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **103 passing in 19 suites** (`npx jest`) |
 | Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
-| Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI |
+| Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI; `npm audit --omit=dev --audit-level=critical` is in CI since #21 |
 | Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
-| Production | Vercel deploys `main` automatically, so everything through #52 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
+| Production | Vercel deploys `main` automatically, so everything through #53 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
 
 Numbers of record: **13 invariants** (INV-1…INV-13) in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
@@ -148,6 +148,7 @@ accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
 | #50 | handover tip | | |
 | #51 | docs bookkeeping after the 2026-09-14 audit; `categories` in DATA-MODEL | | |
 | #52 | the auth review's four low findings | | |
+| #53 | the auth review's eight informational notes | #21 | held 401, logout guard, `allowBackup`, CI audit |
 
 Note the merge order: #42 and #43 landed **before** #41, because #41 was held
 until the owner had run its migration.
@@ -247,8 +248,8 @@ notification preferences are all still **Jest-only**. That checklist is
    of its decisions were reversed while building — the idempotency key it cut
    and the offline queue's "step 1 only" — and both are flagged in place.
 
-9. **The 2026-09-14 auth review: four low findings, fixed in #52; eight
-   informational notes, open.** Fixed: (a) the login page's `?next=` guard
+9. **The 2026-09-14 auth review: four low findings fixed in #52, eight
+   informational notes fixed in #53 and companion #21.** The four: (a) the login page's `?next=` guard
    was a string-prefix check that a backslash slipped past —
    `/login?next=/%5Cevil.com` sent a genuinely signed-in user to `evil.com`;
    `lib/safeNext.ts` now resolves the value as the router will and compares
@@ -261,18 +262,23 @@ notification preferences are all still **Jest-only**. That checklist is
    write and the mail through `afterResponse()` (INV-9). (d) Nothing said how
    to end a stolen admin phone's 7-day session; OPERATIONS.md §6 now has "A
    lost or stolen admin device" — rotate `JWT_SECRET`, redeploy — and KW-3
-   and KW-4 point at it. **Still open, informational, in the order worth
-   doing:** the reset-token single-use check is read-then-write rather than
-   one atomic `UPDATE … WHERE used_at IS NULL RETURNING`; `adjust-stock`'s
-   replay lookup is keyed on `client_request_id` alone rather than with
-   `product_id`; `script-src` carries `'unsafe-eval'`, which only `next dev`
-   needs, and should go before the CSP is promoted; `CRON_SECRET` is compared
-   with `!==` rather than `timingSafeEqual`; `poweredByHeader: false` is not
-   set; the companion registers its 401 handler in an effect, so a replay
-   that 401s before the first commit is swallowed; `android.allowBackup` is
-   unset, so the products cache is in device backups; and the companion's
-   `npm audit --omit=dev` shows 22 advisories, all in Expo build tooling,
-   with no audit step in its CI. The review itself was not committed.
+   and KW-4 point at it. **The eight** (2026-09-15): the reset-token claim
+   is one statement — the `password_resets` `UPDATE … WHERE used_at IS NULL
+   AND expires_at > now() RETURNING user_id` feeds the `users` `UPDATE` in a
+   data-modifying CTE — proved against Postgres 17 in Docker: first claim one
+   row, second claim, expired and used zero, the password changed once;
+   `adjust-stock`'s replay lookup is scoped to the product; `'unsafe-eval'`
+   is in the policy under `next dev` only, and `securityHeaders.test.ts` pins
+   that the shipped one lacks it; `CRON_SECRET` is compared with
+   `timingSafeEqual` (`tests/cronWinback.test.ts`, new, four cases);
+   `poweredByHeader: false`; the companion holds a 401 that arrives before
+   its handler is registered and delivers it once one is, and `logout`
+   refuses to re-enter (`client.test.ts`, `logout.test.tsx`);
+   `android.allowBackup` is `false`, effective on the next build; and the
+   companion's CI audits production dependencies at `critical`. **The one
+   thing from the review left undone:** the 22 advisories in Expo's build
+   tooling, which only a major SDK bump clears — the audit bar rises to
+   `high` when that lands. The review itself was not committed.
 
 ### 0.5 The owner's items
 

@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { runWinbackJob } from '@/server/jobs/winback';
 
@@ -18,7 +19,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('CRON_SECRET is not set - refusing to run the win-back job');
     return res.status(503).json({ error: 'Cron is not configured' });
   }
-  if (req.headers.authorization !== `Bearer ${secret}`) {
+  // Constant-time: `!==` stops at the first byte that differs, so how long a
+  // wrong guess takes says how much of it was right. Lengths are compared
+  // first because timingSafeEqual throws on unequal buffers.
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const given = Buffer.from(req.headers.authorization ?? '');
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

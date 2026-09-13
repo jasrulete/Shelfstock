@@ -188,7 +188,10 @@ describe('POST /api/products/:id/adjust-stock', () => {
     const sql = clientQuery.mock.calls.map(([s]) => s as string);
     expect(sql[1]).toContain('FOR UPDATE');
     expect(sql[2]).toContain('WHERE client_request_id = $1');
-    expect(clientQuery.mock.calls[2][1]).toEqual(['press-abc-123']);
+    // And the product: an id that collides across products must not be
+    // answered with another product's row as if it were this press.
+    expect(sql[2]).toContain('AND product_id = $2');
+    expect(clientQuery.mock.calls[2][1]).toEqual(['press-abc-123', 1]);
     const ledger = txCalls('INSERT INTO stock_adjustments')[0];
     expect(ledger[1]).toEqual([1, 1, 13, 'companion', 7, null, 'press-abc-123']);
   });
