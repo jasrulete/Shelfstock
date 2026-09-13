@@ -225,6 +225,30 @@ Procedure:
 5. Verify with `/api/health`. During step 3–4 the live API returns 500, which
    is itself confirmation that the environment really was using that role.
 
+### A lost or stolen admin device
+
+Nothing on the server ends a session before its 7-day expiry: not a password
+reset ([KW-4](SECURITY.md#kw-4--a-password-reset-does-not-invalidate-existing-sessions)),
+not a demotion ([KW-3](SECURITY.md#kw-3--role-is-read-from-the-jwt-not-the-database)),
+and logging out only clears the client. The companion app puts that 7-day
+admin token on a phone, so a lost phone is an admin session someone else may
+be holding — every order's name, phone and address, and the stock controls.
+There is no per-device revocation; the one control ends every session at once:
+
+1. In Vercel → the project → Settings → Environment Variables, set the
+   production `JWT_SECRET` to a new 32-byte random value (`openssl rand
+   -base64 32` in Git Bash). Preview has its own secret and is untouched.
+2. **Redeploy** — env changes do not reach a running deployment.
+3. Every token signed with the old secret now fails verification. The web
+   app lands on the login page at its next request; the companion signs
+   itself out on its first 401, which also clears its cached data, its push
+   registration and any queued writes.
+4. Sign in again on every admin device. Nothing else needs changing: the
+   token never contained the password, and the reset flow is separate.
+
+The same steps answer the demotion case in KW-3 immediately rather than
+within 7 days.
+
 ### The push notification did not arrive
 
 In order of likelihood:

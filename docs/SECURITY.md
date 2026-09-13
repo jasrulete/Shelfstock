@@ -35,7 +35,7 @@ Three things cross a boundary and are worth naming:
 | Password hashing | `bcryptjs` | Reads `$2b$` hashes written by native bcrypt — verified before the swap. |
 | JWT signing | `jsonwebtoken`, `JWT_SECRET` | 32-byte random, per-environment. Preview has its **own**, not production's. |
 | Reset tokens | 32 CSPRNG bytes, stored SHA-256 hashed | Single use, 1 hour, issuing one retires the rest. The raw value exists only in the mail. |
-| No account oracle | `/forgot-password`, `/reset-password` | Identical responses for known/unknown, expired/used. |
+| No account oracle | `/login`, `/forgot-password`, `/reset-password` | Identical responses for known/unknown, expired/used — and identical work before responding, so timing does not tell them apart either: login runs bcrypt against a fixed hash when the address is unknown, and forgot-password answers after one `SELECT` for both, with the token write and the mail deferred through `afterResponse()`. `/register` answers 409 for a taken address by design; a sign-up form has to say so. |
 | Email validation on register | Normalized address, ≤254 chars | Probed against a running stack: plus tags, subdomains and unicode local parts accepted; `user@localhost`, doubled dots, tabs and CRLF injection refused. |
 | Ownership checks | `GET /api/orders/:id`, `DELETE /api/devices/:token` | Non-owner gets **404, not 403** — a 403 confirms the id exists. |
 | SQL injection | Parameterised queries throughout | `%` and `_` in a search term are escaped rather than treated as wildcards. |
@@ -112,6 +112,8 @@ projection — until their token expires, up to **7 days**.
 device the ex-admin still physically holds, resolve the role at send time
 against the database. Admin promotion is a manual database operation on a
 single-operator store, so the demotion case is close to hypothetical here.
+When it is not, rotating `JWT_SECRET` ends every session at once —
+[OPERATIONS.md §6](OPERATIONS.md#a-lost-or-stolen-admin-device).
 
 **Why it is not simply fixed:** re-reading the role means a database round trip
 on every authenticated request, turning auth from stateless to stateful. That
@@ -125,7 +127,10 @@ own comment as well as here.
 **Compensating controls:** the reset flow itself is sound (hashed single-use
 tokens, 1-hour TTL, outstanding tokens retired on reissue), and token lifetime
 is bounded. The attack requires an already-stolen token, which is
-[KW-1](#kw-1--the-jwt-lives-in-localstorage)'s scenario, not a new one.
+[KW-1](#kw-1--the-jwt-lives-in-localstorage)'s scenario, not a new one — or,
+now that the companion carries an admin token on a phone, a lost device. For
+that, rotating `JWT_SECRET` ends every session at once:
+[OPERATIONS.md §6](OPERATIONS.md#a-lost-or-stolen-admin-device).
 
 ### KW-5 — `POST /api/orders` has no idempotency key
 

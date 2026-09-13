@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
+import { afterResponse } from '../afterResponse';
 import { pool } from '../db';
 import { sendPasswordReset } from '../mail';
 import { siteUrl } from '@/lib/siteUrl';
@@ -10,6 +11,10 @@ import { PublicUser, User } from '../types';
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const SALT_ROUNDS = 10;
+
+// Compared against when the email is unknown, so that path costs the same as
+// a wrong password does. Hashed at SALT_ROUNDS because the cost is the point.
+const UNKNOWN_USER_HASH = bcrypt.hashSync('unknown-user', SALT_ROUNDS);
 
 /**
  * Deliberately not an RFC 5322 parser. That grammar allows quoted local parts
@@ -110,13 +115,10 @@ router.post('/login', async (req, res) => {
     const user = result.rows[0];
 
     // Same error message whether the email doesn't exist or the password is
-    // wrong, so we don't leak which emails are registered.
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    const matches = await bcrypt.compare(password, user.password_hash);
-    if (!matches) {
+    // wrong, so we don't leak which emails are registered - and the same
+    // bcrypt cost on both paths, so the response time doesn't leak it either.
+    const matches = await bcrypt.compare(password, user?.password_hash ?? UNKNOWN_USER_HASH);
+    if (!user || !matches) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
@@ -137,6 +139,34 @@ const RESET_TTL_MINUTES = 60;
  *  human-chosen secret, so there is nothing to slow an attacker down for. */
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/** Retires the user's outstanding reset tokens, writes a new one, mails the link. */
+async function issueResetLink(user: User): Promise<void> {
+  // Issuing a new link retires any earlier one, so a forwarded or shoulder
+  // surfed old email stops working the moment the real owner asks again.
+  await pool.query(
+    `UPDATE password_resets SET used_at = now()
+     WHERE user_id = $1 AND used_at IS NULL`,
+    [user.id]
+  );
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  await pool.query(
+    `INSERT INTO password_resets (user_id, token_hash, expires_at)
+     VALUES ($1, $2, now() + ($3 || ' minutes')::interval)`,
+    [user.id, hashToken(token), String(RESET_TTL_MINUTES)]
+  );
+
+  const link = `${siteUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+  // Local development has no RESEND_API_KEY, so the mail is a silent no-op
+  // and the flow would be untestable by hand. Never in production.
+  if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== 'production') {
+    console.log(`[dev] password reset link for ${user.email}: ${link}`);
+  }
+
+  await sendPasswordReset(user.email, link, RESET_TTL_MINUTES);
 }
 
 /**
@@ -165,35 +195,16 @@ router.post('/forgot-password', async (req, res) => {
       email.trim().toLowerCase(),
     ]);
     const user = found.rows[0];
-    if (!user) {
-      return res.json(answer);
-    }
 
-    // Issuing a new link retires any earlier one, so a forwarded or shoulder
-    // surfed old email stops working the moment the real owner asks again.
-    await pool.query(
-      `UPDATE password_resets SET used_at = now()
-       WHERE user_id = $1 AND used_at IS NULL`,
-      [user.id]
-    );
-
-    const token = crypto.randomBytes(32).toString('base64url');
-    await pool.query(
-      `INSERT INTO password_resets (user_id, token_hash, expires_at)
-       VALUES ($1, $2, now() + ($3 || ' minutes')::interval)`,
-      [user.id, hashToken(token), String(RESET_TTL_MINUTES)]
-    );
-
-    const link = `${siteUrl}/reset-password?token=${encodeURIComponent(token)}`;
-
-    // Local development has no RESEND_API_KEY, so the mail is a silent no-op
-    // and the flow would be untestable by hand. Never in production.
-    if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== 'production') {
-      console.log(`[dev] password reset link for ${user.email}: ${link}`);
-    }
-
-    await sendPasswordReset(user.email, link, RESET_TTL_MINUTES);
+    // Answered here for both outcomes, so the response takes one SELECT
+    // whether or not the address is known. The token write and the mail run
+    // after the response (INV-9): awaiting them made a known address answer a
+    // Resend round trip later than an unknown one - the same body, told apart
+    // by a clock - and would turn a hung provider into a 504.
     res.json(answer);
+    if (user) {
+      afterResponse('Forgot password error', issueResetLink(user));
+    }
   } catch (err) {
     console.error('Forgot password error:', err);
     // Still the same answer: an error here must not be distinguishable either.

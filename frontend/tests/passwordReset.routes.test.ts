@@ -74,11 +74,32 @@ describe('POST /api/auth/forgot-password', () => {
     expect(call('INSERT INTO password_resets')).toBeUndefined();
   });
 
+  it('answers as soon as the address is looked up, without waiting for the mail', async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [USER] });
+    // A mail send that never settles - a hung Resend. The response must not
+    // hang with it: that delay is what told a known address from an unknown
+    // one, and it would turn a hung provider into a 504 on a request that
+    // had already done its work.
+    sendPasswordReset.mockImplementationOnce(() => new Promise<boolean>(() => {}));
+
+    const res = await request(app).post('/api/auth/forgot-password').send({ email: USER.email });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      message: 'If that email has an account, a reset link is on its way.',
+    });
+    // The work still happens - after the response.
+    await vi.waitFor(() => expect(sendPasswordReset).toHaveBeenCalledTimes(1));
+    expect(call('INSERT INTO password_resets')).toBeDefined();
+  });
+
   it('stores only a hash of the token, never the token itself', async () => {
     poolQuery.mockResolvedValueOnce({ rows: [USER] });
 
     await request(app).post('/api/auth/forgot-password').send({ email: USER.email });
 
+    // The token write and the mail run after the response is sent.
+    await vi.waitFor(() => expect(sendPasswordReset).toHaveBeenCalledTimes(1));
     const insert = call('INSERT INTO password_resets')!;
     expect(insert).toBeDefined();
 
@@ -97,7 +118,7 @@ describe('POST /api/auth/forgot-password', () => {
 
     await request(app).post('/api/auth/forgot-password').send({ email: USER.email });
 
-    expect(call('UPDATE password_resets')).toBeDefined();
+    await vi.waitFor(() => expect(call('UPDATE password_resets')).toBeDefined());
   });
 
   it('normalizes the address, so a differently-cased email still resets', async () => {
