@@ -251,8 +251,9 @@ The companion's offline queue persists a press with a `requestId` made at
 press time and sends it with every attempt, because its persister's write to
 disk lags the live state by up to a second and an app killed in that window
 after a reconnect replays a press that already landed. `adjust-stock` looks
-the id up under the row lock (`stock_adjustments.client_request_id`, unique
-where not null) and answers a replay with the row it already wrote.
+the id up under the row lock, scoped to the product
+(`stock_adjustments.client_request_id`, unique where not null), and answers a
+replay with the row it already wrote.
 
 *Enforced by:* `tests/stockLedger.routes.test.ts`, plus one ledger test for
 each order path in `tests/orders.routes.test.ts`. *A fifth path that changes

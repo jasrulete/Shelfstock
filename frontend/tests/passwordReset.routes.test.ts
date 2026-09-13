@@ -142,10 +142,12 @@ describe('POST /api/auth/forgot-password', () => {
 describe('POST /api/auth/reset-password', () => {
   const rawToken = 'a'.repeat(43);
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  const past = new Date(Date.now() - 1000).toISOString();
 
-  it('rejects an unknown token', async () => {
+  // The database decides all three - unknown, expired, used - in the WHERE of
+  // one statement that also writes the password, so the mock cannot show an
+  // expired row being refused; what it can show is that the statement asks
+  // the right question and that an empty answer is the one 400.
+  it('claims the token and writes the password in one statement, and a zero-row claim is the same 400 for unknown, expired and used', async () => {
     poolQuery.mockResolvedValue({ rows: [] });
 
     const res = await request(app)
@@ -154,44 +156,13 @@ describe('POST /api/auth/reset-password', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('This reset link is invalid or has expired');
-    expect(call('UPDATE users SET password_hash')).toBeUndefined();
-  });
 
-  // Same message for expired as for unknown: telling them apart would confirm
-  // a token once existed.
-  it('rejects an expired token with the same message as an unknown one', async () => {
-    poolQuery.mockResolvedValueOnce({
-      rows: [{ id: 1, user_id: USER.id, token_hash: tokenHash, expires_at: past, used_at: null }],
-    });
-
-    const res = await request(app)
-      .post('/api/auth/reset-password')
-      .send({ token: rawToken, password: 'new-password1' });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('This reset link is invalid or has expired');
-    expect(call('UPDATE users SET password_hash')).toBeUndefined();
-  });
-
-  it('refuses a token that has already been used', async () => {
-    poolQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 1,
-          user_id: USER.id,
-          token_hash: tokenHash,
-          expires_at: future,
-          used_at: new Date().toISOString(),
-        },
-      ],
-    });
-
-    const res = await request(app)
-      .post('/api/auth/reset-password')
-      .send({ token: rawToken, password: 'new-password1' });
-
-    expect(res.status).toBe(400);
-    expect(call('UPDATE users SET password_hash')).toBeUndefined();
+    expect(poolQuery).toHaveBeenCalledTimes(1);
+    const [sql] = poolQuery.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('UPDATE password_resets SET used_at = now()');
+    expect(sql).toContain('used_at IS NULL');
+    expect(sql).toContain('expires_at > now()');
+    expect(sql).toContain('UPDATE users SET password_hash');
   });
 
   it('enforces the same minimum password length as registration', async () => {
@@ -212,14 +183,13 @@ describe('POST /api/auth/reset-password', () => {
       .send({ token: rawToken, password: 'new-password1' });
 
     const lookup = poolQuery.mock.calls[0];
-    expect(lookup[1]).toEqual([tokenHash]);
+    expect((lookup[1] as unknown[])[0]).toBe(tokenHash);
     expect(JSON.stringify(lookup[1])).not.toContain(rawToken);
   });
 
   it('stores a bcrypt hash of the new password and burns the token', async () => {
-    poolQuery.mockResolvedValueOnce({
-      rows: [{ id: 1, user_id: USER.id, token_hash: tokenHash, expires_at: future, used_at: null }],
-    });
+    // One row back from the claim: the token was live and is now used.
+    poolQuery.mockResolvedValueOnce({ rows: [{ id: USER.id }] });
 
     const res = await request(app)
       .post('/api/auth/reset-password')
@@ -228,12 +198,12 @@ describe('POST /api/auth/reset-password', () => {
     expect(res.status).toBe(200);
 
     const update = call('UPDATE users SET password_hash')!;
-    const storedHash = (update[1] as string[])[0];
+    const storedHash = (update[1] as string[])[1];
     expect(storedHash).not.toBe('new-password1');
     expect(storedHash).toMatch(/^\$2[aby]\$/);
     expect(await bcrypt.compare('new-password1', storedHash)).toBe(true);
 
-    // Single use.
-    expect(call('SET used_at')).toBeDefined();
+    // Single use, in the same statement.
+    expect(update[0]).toContain('SET used_at = now()');
   });
 });

@@ -425,12 +425,16 @@ router.post('/:id/adjust-stock', requireAuth, adminOnly, async (req, res) => {
     // was first sent with. Under the same row lock, so a duplicate in flight
     // waits and then sees the row: answer with what was already written,
     // and the count as it stands now. Nothing moves, nothing is logged twice.
+    // Scoped to this product: the ids are client-made, and an id that
+    // collided with a press on another product must not be answered with
+    // that product's row as if it were this one. (The INSERT below still
+    // refuses the collision, as a 500 the client retries once and then shows.)
     if (clientRequestId !== null) {
       const seen = await client.query(
         `SELECT id, product_id, delta, new_stock, source, user_id, note, created_at, client_request_id
          FROM stock_adjustments
-         WHERE client_request_id = $1`,
-        [clientRequestId]
+         WHERE client_request_id = $1 AND product_id = $2`,
+        [clientRequestId, id]
       );
       if (seen.rows.length > 0) {
         await client.query('ROLLBACK');

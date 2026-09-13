@@ -3,7 +3,7 @@
 The five things only you can do, in the order that works, with what "done"
 looks like for each. Written 2026-09-06. Task 1 is done, and task 2 is mostly
 done — the APK is built, installed and signing in. Shelfstock `main` is at
-the merge of #52, the companion at the merge of #20, and nothing is held. Every command was checked against the code, the tools'
+the merge of #53, the companion at the merge of #21, and nothing is held. Every command was checked against the code, the tools'
 own help, or run here; where something could not be verified it says so.
 
 | # | Task | Time | Depends on |
@@ -544,9 +544,9 @@ logs one `CSP violation: …` line per report. Promotion renames that header to
 switch or env var: the header name is one string literal in
 `frontend/next.config.js`, and the rollout is a merge to `main`.
 
-**What it will and will not enforce.** The policy still allows inline and
-eval scripts, so promotion mainly enforces images, fonts, connections, forms
-and framing; it does not close the XSS gap that [SECURITY.md](SECURITY.md)
+**What it will and will not enforce.** The policy still allows inline
+scripts (`'unsafe-eval'` is added under `next dev` only), so promotion mainly
+enforces images, fonts, connections, forms and framing; it does not close the XSS gap that [SECURITY.md](SECURITY.md)
 KW-1 describes, and the docs should keep saying so.
 
 ### Steps
@@ -594,8 +594,8 @@ KW-1 describes, and the docs should keep saying so.
    `frontend/tests/securityHeaders.test.ts` (one reads the report-only header,
    one asserts the enforcing header is absent), rewrite the "Residual"
    paragraph of [SECURITY.md](SECURITY.md) KW-1 and both bullets under it
-   (report-only becomes enforcing, but inline and eval stay allowed so the
-   XSS residual stands; "frame-ancestors is inert" stops being true),
+   (report-only becomes enforcing, but inline stays allowed so the XSS
+   residual stands; "frame-ancestors is inert" stops being true),
    update [OPERATIONS.md §5](OPERATIONS.md#reading-csp-reports) (keep that
    heading's text — it is an anchor other docs link to), the README's
    "report-only" sentence and the handover; run

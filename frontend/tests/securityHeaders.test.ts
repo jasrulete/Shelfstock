@@ -45,4 +45,22 @@ describe('next.config.js headers()', () => {
     expect(h['X-Frame-Options']).toBe('DENY');
     expect(h['X-Content-Type-Options']).toBe('nosniff');
   });
+
+  // 'unsafe-inline' is a documented residual (SECURITY.md KW-1). 'unsafe-eval'
+  // is not: only `next dev` evals, so the shipped policy must not allow it, or
+  // promotion would enforce less than it appears to.
+  it('does not allow eval in the policy that ships (vitest is not `next dev`)', async () => {
+    const h = await pageHeaders();
+    const scriptSrc = h['Content-Security-Policy-Report-Only']
+      .split('; ')
+      .find((d) => d.startsWith('script-src '));
+    expect(scriptSrc).toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toContain("'unsafe-eval'");
+  });
+});
+
+describe('next.config.js', () => {
+  it('does not advertise the framework in an X-Powered-By header', () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
 });

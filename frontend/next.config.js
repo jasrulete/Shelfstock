@@ -23,9 +23,15 @@ const exchangeRateOrigin = (() => {
  * in docs/OPERATIONS.md, and tests/securityHeaders.test.ts pins that no
  * enforcing header ships until someone changes it on purpose.
  */
+// Only `next dev` evals - its bundles carry eval source maps. A production
+// bundle never does, so the policy that ships must not allow it, or promotion
+// would enforce less than it reads as. Next sets NODE_ENV before loading this
+// file, so the same config serves both.
+const isDev = process.env.NODE_ENV === 'development';
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://images.unsplash.com https://placehold.co",
   "font-src 'self' data:",
@@ -69,6 +75,9 @@ const nextConfig = {
       },
     ];
   },
+  // helmet already strips X-Powered-By on /api; pages advertised the framework
+  // until this. Fingerprinting only, and free to turn off.
+  poweredByHeader: false,
   // Emit a self-contained server bundle so the Docker image can run
   // `node server.js` without node_modules. Harmless outside Docker.
   output: 'standalone',
