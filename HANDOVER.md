@@ -43,7 +43,10 @@ eight lines of documentation drift, fixed in #51 — the one substantive miss
 being that `docs/DATA-MODEL.md` had never described the `categories` table.
 The auth review found no critical, high or medium issue; its four low findings
 were fixed the same day (#52) and its eight informational notes the day after
-(#53, companion #21) — §0.4 item 9 has the list.
+(#53, companion #21) — §0.4 item 9 has the list. **Also 2026-09-15: the last
+correctness item closed.** The product form no longer sends `stock` on an
+edit (companion #22), so a queued edit can no longer land on top of queued
+stepper presses — §0.4 item 1.
 
 **Also 2026-09-12: five advisories published since 2026-09-06 turned CI red,
 and the dependency floors were raised** (#49). One was a critical Next.js
@@ -61,15 +64,15 @@ source of truth, and §0.9 says which document owns what.
 
 | | Shelfstock (web + API) | shelfstock-companion (Android) |
 |---|---|---|
-| `main` | the merge of #53 (auth review, informational notes) | the merge of #21 |
+| `main` | the merge of #54 (product-form hazard, docs) | the merge of #22 |
 | Working tree | clean, on `main` | clean, on `main` |
 | Open PRs | none | none |
 | Remote branches | `main` only | `main` only |
-| Tests | **321 passing in 30 files** — `server` project 262 in 22, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **103 passing in 19 suites** (`npx jest`) |
+| Tests | **321 passing in 30 files** — `server` project 262 in 22, `ui` project 59 in 8 (`npx vitest run` in `frontend/`) | **105 passing in 20 suites** (`npx jest`) |
 | Lint / types | `npm run lint` and `npx tsc --noEmit` both clean | `npx eslint .` and `npx tsc --noEmit` both clean |
 | Docs check | `npm run docs:check` — 21 files, every relative link and anchor resolves | no doc check in CI; `npm audit --omit=dev --audit-level=critical` is in CI since #21 |
 | Migrations | 5 files; the newest, `1788669665419_stock_adjustments_client_request_id.sql`, has been **run on production and on the Neon `preview` branch** | — |
-| Production | Vercel deploys `main` automatically, so everything through #53 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
+| Production | Vercel deploys `main` automatically, so everything through #54 is live | **An APK exists and runs.** EAS project `c633bc8c-4d30-4718-a2d2-bc057c033347`; build `826ba500-7f52-43a6-bf53-948bc1429678`, profile `preview`, version 1.0.0, versionCode 1, pointed at production. Installed on the owner's device and signing in (2026-09-12). **Not yet released** — no tag, no GitHub Release — and **push cannot deliver**: no Firebase (§0.4) |
 
 Numbers of record: **13 invariants** (INV-1…INV-13) in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), **9 known weaknesses**
@@ -149,6 +152,7 @@ accepted record. The rest were handover refreshes (#31, #36, #37, #39, #42,
 | #51 | docs bookkeeping after the 2026-09-14 audit; `categories` in DATA-MODEL | | |
 | #52 | the auth review's four low findings | | |
 | #53 | the auth review's eight informational notes | #21 | held 401, logout guard, `allowBackup`, CI audit |
+| #54 | ADR-0009, runbook, handover: the product-form hazard closed | #22 | an edit sends no `stock` |
 
 Note the merge order: #42 and #43 landed **before** #41, because #41 was held
 until the owner had run its migration.
@@ -215,11 +219,18 @@ notification preferences are all still **Jest-only**. That checklist is
 
 ### 0.4 Known gaps, named and not done
 
-1. **The product form PUTs an absolute `stock`.** An edit queued alongside
-   stepper presses on the same product replays in parallel with them
-   (different mutation scopes) and can land on top of what they moved. Named
-   in the companion's C-INV-8 and in ADR-0009; not fixed. This is the one
-   real correctness item left.
+1. ~~The product form PUTs an absolute `stock`.~~ **Closed 2026-09-15**
+   (companion #22). An edit queued alongside stepper presses on the same
+   product replayed in parallel with them (different mutation scopes) and
+   could land on top of what they moved. Now `ProductForm` takes a `mode`:
+   `edit` shows the count read-only with a pointer to the stepper and never
+   submits one, so the PUT carries no `stock` and there is nothing for the
+   two scopes to disagree on; `create` still POSTs the initial count, since
+   no press can be queued on a product that does not exist. The server's PUT
+   already treated an absent `stock` as "leave it" (`COALESCE`), so nothing
+   changed on this side but the docs. Pinned by the form test and a new
+   edit-screen test that reads the PUT body. **No correctness item is open in
+   either repo.**
 2. **Screenshots and the scan GIF do not exist.** `docs/screenshots/` holds a
    `.gitkeep`. The companion README's Screenshots section is still an HTML
    comment. Roadmap §4.1 is the only roadmap row not done.

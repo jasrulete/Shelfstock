@@ -3,7 +3,7 @@
 The five things only you can do, in the order that works, with what "done"
 looks like for each. Written 2026-09-06. Task 1 is done, and task 2 is mostly
 done — the APK is built, installed and signing in. Shelfstock `main` is at
-the merge of #53, the companion at the merge of #21, and nothing is held. Every command was checked against the code, the tools'
+the merge of #54, the companion at the merge of #22, and nothing is held. Every command was checked against the code, the tools'
 own help, or run here; where something could not be verified it says so.
 
 | # | Task | Time | Depends on |
@@ -636,7 +636,6 @@ says report-only.
 Nothing is queued for the agent beyond what each section hands over. The
 roadmap has no Phase 4; the candidates the 2026-09-06 session noted are in
 [HANDOVER.md §0](../HANDOVER.md), all now done — including the transport-error
-retry, which shipped as companion #17 once #41 made it safe. The one thing
-still named and not done is the product form's PUT-with-stock hazard in the
-companion's architecture doc: an edit queued alongside stepper presses on the
-same product can land on top of what they moved.
+retry, which shipped as companion #17 once #41 made it safe — and the
+product form's PUT-with-stock hazard, the last item named there, closed on
+2026-09-15 (companion #22): an edit no longer sends a stock count.

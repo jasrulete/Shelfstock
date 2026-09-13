@@ -64,10 +64,12 @@ Offline writes are in scope, as a persisted mutation queue:
 - The retry budget lives in the attempt, not the persisted state, so a press
   restored from disk may retry once more per launch. Harmless: every attempt
   carries the same id.
-- Still out of scope, and named rather than fixed: the product form PUTs an
-  absolute `stock`, so an edit queued alongside stepper presses on the same
-  product replays in parallel with them and can land on top of what they
-  moved.
+- The product form's absolute `stock` on PUT — named here as out of scope
+  when this was written, because an edit queued alongside stepper presses on
+  the same product replayed in parallel with them and could land on top of
+  what they moved — was closed on 2026-09-15 (companion #22): an edit no
+  longer sends `stock` at all. The count is shown read-only and changes only
+  through the stepper, so there is nothing for the two scopes to disagree on.
 
 ## Alternatives considered
 
